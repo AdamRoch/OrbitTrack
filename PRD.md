@@ -2,7 +2,7 @@
 
 *An agent-native ticket tracker that enables autonomous, asynchronous, inter-harness collaboration.*
 
-A local, single-user, no-auth issue tracker for managing tickets used to drive agentic development. The tracker is not a clone of Linear's collaboration features — it is the **core issue model plus a dependency graph and an HTTP agent API**. The single highest-value capability is the **frontier**: the set of issues an agent can pick up next because they are unblocked and ready.
+A local, single-user, no-auth issue tracker for managing tickets used to drive agentic development. The tracker is not a clone of Linear's collaboration features — it is the **core issue model plus a dependency graph and an HTTP agent API**. The highest-value capability is the **advisor relationship**: a cheap implementing agent works a ticket, and when it hits a decision it can't resolve alone, it asks a question through the tracker — a smarter advisor agent answers, and the implementer proceeds. You get expensive-model intelligence at the decision points, not on every line of code.
 
 ---
 

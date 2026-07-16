@@ -2,10 +2,33 @@
 
 **An agent-native ticket tracker that enables autonomous, asynchronous, inter-harness collaboration.**
 
-A local, no-auth issue tracker for driving agentic development. Issues with status, priority, and labels
-plus a **dependency graph** and an **HTTP agent API**. The single highest-value
-capability is the **frontier** — the set of issues an agent can pick up next
-because they're `todo` and unblocked.
+A local, no-auth issue tracker for driving agentic development. Issues with
+status, priority, and labels plus a **dependency graph** and an **HTTP agent
+API**.
+
+The highest-value capability is the **advisor relationship**: a cheap, fast
+implementing agent works a ticket, and when it hits a decision it can't resolve
+alone, it asks a question through the tracker. A smarter, more expensive advisor
+agent reads the question with full issue context and answers it. The implementer
+proceeds. You get expensive-model intelligence in your pipeline at the decision
+points — not on every line of code.
+
+Because the collaboration happens over HTTP, the two agents don't need to share
+a harness. Pair them however you like:
+
+- **GLM 5.2 in ZCode** implements via `/work-with-help`; **Claude Opus in Claude
+  Code** advises via `/advise`. Neither harness knows the other exists — they
+  communicate only through the tracker.
+- **An OpenRouter-routed model** in one harness implements; a subscription-plan
+  Claude Code session in another answers questions — programmatic collaboration
+  across harnesses without an API key in the loop.
+
+Underneath the advisor layer sits the **frontier** — the set of issues an agent
+can pick up next because they're `todo` and unblocked — and the dependency
+graph that sequences work. Together they make the advisor pattern scale: an
+implementer works a chain of tickets in blocking order, asking only when it
+needs to, while the advisor answers asynchronously across whatever harness it
+runs in.
 
 Built with Next.js (App Router), SQLite (via Drizzle ORM + better-sqlite3), and
 Tailwind. The whole tracker is one SQLite file.
