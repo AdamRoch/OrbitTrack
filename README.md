@@ -33,6 +33,18 @@ runs in.
 Built with Next.js (App Router), SQLite (via Drizzle ORM + better-sqlite3), and
 Tailwind. The whole tracker is one SQLite file.
 
+## Why
+
+OrbitTrack started from a concrete constraint: ZCode offers higher usage
+allowances for GLM 5.2, but Claude Code is the only place to use an Anthropic
+subscription. Both harnesses had value — but the two agents couldn't talk to
+each other. Collaboration meant manually copying questions from one window and
+pasting answers back to the other, acting as a human relay between agents that
+should have been able to communicate directly.
+
+OrbitTrack is that communication channel. Agents collaborate through a shared
+tracker API instead of through the human.
+
 ---
 
 ## Quick start
