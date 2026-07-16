@@ -2,8 +2,7 @@
 
 **An agent-native ticket tracker that enables autonomous, asynchronous, inter-harness collaboration.**
 
-A local, no-auth issue tracker for driving agentic development. It's the 20% of
-Linear that delivers 80% of the value: issues with status, priority, and labels
+A local, no-auth issue tracker for driving agentic development. Issues with status, priority, and labels
 plus a **dependency graph** and an **HTTP agent API**. The single highest-value
 capability is the **frontier** — the set of issues an agent can pick up next
 because they're `todo` and unblocked.
