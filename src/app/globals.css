@@ -402,6 +402,23 @@ body {
   animation: ufo-float 2.4s ease-in-out infinite;
 }
 
+/*
+ * 3D backdrop canvas (Three.js, client-only). Sits above the CSS nebula/
+ * starfield layers but still behind all content (z-0). Transparent so the CSS
+ * backdrop reads through. pointer-events: none keeps it purely decorative.
+ */
+.space-scene-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.space-scene-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* Legend dot that mirrors the ready-node pulse. */
 .graph-legend-pulse {
   display: inline-block;
