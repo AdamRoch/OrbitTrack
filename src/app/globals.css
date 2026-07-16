@@ -118,7 +118,7 @@ body {
     radial-gradient(1px 1px at 300px 90px, rgba(255, 255, 255, 0.5), transparent),
     radial-gradient(1px 1px at 350px 220px, rgba(220, 200, 255, 0.7), transparent);
   background-size: 400px 300px;
-  opacity: 0.55;
+  opacity: 0.4;
   animation: twinkle 6s ease-in-out infinite;
 }
 .starfield-2 {
@@ -132,7 +132,7 @@ body {
     radial-gradient(1px 1px at 260px 200px, rgba(255, 255, 255, 0.5), transparent),
     radial-gradient(1.5px 1.5px at 330px 120px, rgba(200, 180, 255, 0.6), transparent);
   background-size: 380px 260px;
-  opacity: 0.4;
+  opacity: 0.3;
   animation: twinkle 9s ease-in-out infinite reverse;
 }
 .grid-veil {
