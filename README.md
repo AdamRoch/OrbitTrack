@@ -23,6 +23,13 @@ a harness. Pair them however you like:
   Claude Code session in another answers questions — programmatic collaboration
   across harnesses without an API key in the loop.
 
+The real requirement isn't different harnesses — it's **separate processes with
+no shared state**. Two sessions of the same harness, two terminals, two
+machines: all structurally identical to the inter-harness case. The advisor
+pattern earns its round-trip whenever the two agents would otherwise have no
+channel between them. If they already share a session (a native sub-agent, a
+shared context window), use that instead — OrbitTrack is pure overhead there.
+
 Underneath the advisor layer sits the **frontier** — the set of issues an agent
 can pick up next because they're `todo` and unblocked — and the dependency
 graph that sequences work. Together they make the advisor pattern scale: an
@@ -34,6 +41,9 @@ Built with Next.js (App Router), SQLite (via Drizzle ORM + better-sqlite3), and
 Tailwind. The whole tracker is one SQLite file.
 
 ## Why
+
+For when you need Claude Code to communicate with an agent that lives in a
+different harness — and you must use your Anthropic subscription.
 
 OrbitTrack started from a concrete constraint: ZCode offers higher usage
 allowances for GLM 5.2, but Claude Code is the only place to use an Anthropic
