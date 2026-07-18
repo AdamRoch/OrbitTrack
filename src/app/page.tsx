@@ -61,7 +61,7 @@ export default async function IssuesPage({
       </Reveal>
 
       <Reveal delay={140}>
-        <div className="glass-bezel">
+        <div className="ticket-panel rounded-[1.75rem] p-1.5">
           <div className="glass-core divide-y divide-[--border] overflow-hidden p-0">
             {issues.length === 0 ? (
               <EmptyState hasFilters={hasFilters} />

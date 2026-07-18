@@ -32,7 +32,7 @@ export default async function FrontierPage() {
       </Reveal>
 
       <Reveal delay={80}>
-        <div className="glass-bezel">
+        <div className="ticket-panel rounded-[1.75rem] p-1.5">
           <div className="glass-core divide-y divide-[--border] overflow-hidden p-0">
             {frontier.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -58,7 +58,7 @@ export default async function FrontierPage() {
       </p>
 
       <Reveal delay={140}>
-        <div className="glass mt-6 rounded-2xl p-4">
+        <div className="glass glow-edge rounded-2xl p-4">
           <h2 className="text-sm font-medium mb-1 text-[--foreground]">Agent usage</h2>
           <p className="text-xs text-[--foreground-muted] leading-relaxed">
             Agents fetch the same set via{" "}

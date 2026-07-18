@@ -78,7 +78,7 @@ export default async function IssueDetailPage({
             </h2>
             {descriptionHtml ? (
               <div
-                className="glass rounded-2xl p-4 text-sm text-[--foreground] leading-relaxed"
+                className="glass glow-edge rounded-2xl p-4 text-sm text-[--foreground] leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: descriptionHtml }}
               />
             ) : (
@@ -114,7 +114,7 @@ export default async function IssueDetailPage({
             issues={blockedBy}
             emptyText="Nothing depends on this issue."
           />
-          <div className="glass rounded-2xl p-3 text-xs text-[--foreground-subtle] space-y-1">
+          <div className="glass glow-edge rounded-2xl p-3 text-xs text-[--foreground-subtle] space-y-1">
             <div>
               Created{" "}
               <time dateTime={issue.createdAt}>
@@ -157,7 +157,7 @@ function DependencyList({
             <li key={i.id}>
               <Link
                 href={`/issues/${i.identifier}`}
-                className="group flex items-center gap-2 rounded-xl border border-[--border] bg-[--surface]/60 px-3 py-2 text-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[--border-strong] hover:bg-[--surface-hover]/80"
+                className="group flex items-center gap-2 rounded-xl border border-[--border] bg-[--surface]/60 px-3 py-2 text-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_55%,transparent)] hover:bg-[--surface-hover]/80 hover:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_35%,transparent),0_0_20px_-6px_rgba(var(--glow),0.6)]"
               >
                 <span className="font-mono text-xs text-[--foreground-subtle]">
                   {i.identifier}

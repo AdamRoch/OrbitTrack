@@ -35,7 +35,7 @@ export function FilterBar({
     "h-9 rounded-full border border-[--border] bg-[--surface-2]/70 px-3 text-sm text-[--foreground] backdrop-blur-sm focus:outline-none focus:border-[--accent] cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]";
 
   return (
-    <div className="glass flex flex-wrap items-end gap-3 mb-5 rounded-2xl p-3">
+    <div className="glass glow-edge flex flex-wrap items-end gap-3 mb-5 rounded-2xl p-3">
       <div className="flex flex-col gap-1">
         <label className="text-xs text-[--foreground-muted]">Status</label>
         <select

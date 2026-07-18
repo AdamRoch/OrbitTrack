@@ -51,7 +51,8 @@ const easeOutBack = (x: number) => {
   return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
 };
 
-/** Builds a low-poly saucer. `detailed` adds under-lights (used for the hero). */
+/** Builds a low-poly saucer. `detailed` adds under-lights, a rim of panels,
+ * a pulsing dome and a spinning ring (used for the hero + companion ships). */
 function buildUfo(
   scale: number,
   ringColor: number,
@@ -60,7 +61,7 @@ function buildUfo(
 ) {
   const group = new THREE.Group();
 
-  const bodyGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.5, 32);
+  const bodyGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.5, 48);
   const bodyMat = new THREE.MeshStandardMaterial({
     color: 0x1a2233,
     metalness: 0.85,
@@ -69,6 +70,19 @@ function buildUfo(
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.scale.y = 0.35;
   group.add(body);
+
+  // A flared lower hull so the silhouette reads as a classic saucer.
+  const hullGeo = new THREE.ConeGeometry(1.6, 0.7, 48, 1, true);
+  const hullMat = new THREE.MeshStandardMaterial({
+    color: 0x141b2b,
+    metalness: 0.8,
+    roughness: 0.4,
+    side: THREE.DoubleSide,
+  });
+  const hull = new THREE.Mesh(hullGeo, hullMat);
+  hull.position.y = -0.28;
+  hull.rotation.x = Math.PI;
+  group.add(hull);
 
   const domeGeo = new THREE.SphereGeometry(
     0.8,
@@ -92,7 +106,7 @@ function buildUfo(
   dome.position.y = 0.18;
   group.add(dome);
 
-  const ringGeo = new THREE.TorusGeometry(1.6, 0.08, 16, 48);
+  const ringGeo = new THREE.TorusGeometry(1.6, 0.08, 16, 64);
   const ringMat = new THREE.MeshStandardMaterial({
     color: ringColor,
     emissive: ringColor,
@@ -104,6 +118,20 @@ function buildUfo(
   ring.rotation.x = Math.PI / 2;
   group.add(ring);
 
+  // A thin outer rim that catches the key light for extra definition.
+  const rimGeo = new THREE.TorusGeometry(1.62, 0.03, 12, 64);
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: 0xcfe8ff,
+    emissive: 0x3a5a7a,
+    emissiveIntensity: 0.6,
+    metalness: 0.9,
+    roughness: 0.2,
+  });
+  const rim = new THREE.Mesh(rimGeo, rimMat);
+  rim.rotation.x = Math.PI / 2;
+  group.add(rim);
+
+  const bulbs: THREE.Mesh[] = [];
   let bulbMat: THREE.MeshStandardMaterial | undefined;
   if (detailed) {
     const lightGeo = new THREE.SphereGeometry(0.12, 12, 12);
@@ -112,18 +140,30 @@ function buildUfo(
       emissive: 0xa3e635,
       emissiveIntensity: 4,
     });
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
       const bulb = new THREE.Mesh(lightGeo, bulbMat);
       bulb.position.set(Math.cos(a) * 1.2, -0.18, Math.sin(a) * 1.2);
       group.add(bulb);
+      bulbs.push(bulb);
     }
     disposables.push(lightGeo, bulbMat);
   }
 
   group.scale.setScalar(scale);
-  disposables.push(bodyGeo, bodyMat, domeGeo, domeMat, ringGeo, ringMat);
-  return { group, ringMat };
+  disposables.push(
+    bodyGeo,
+    bodyMat,
+    hullGeo,
+    hullMat,
+    domeGeo,
+    domeMat,
+    ringGeo,
+    ringMat,
+    rimGeo,
+    rimMat,
+  );
+  return { group, ringMat, ring, rim, domeMat, bulbs };
 }
 
 export default function SpaceScene() {
@@ -172,7 +212,7 @@ export default function SpaceScene() {
     scene.add(rim);
 
     // --- Hero UFO -----------------------------------------------------------
-    const { group: ufo, ringMat: ufoRingMat } = buildUfo(
+    const { group: ufo, ringMat: ufoRingMat, ring: ufoRing, rim: ufoRim, domeMat: ufoDomeMat, bulbs: ufoBulbs } = buildUfo(
       1.7,
       0xa3e635,
       true,
@@ -231,9 +271,14 @@ export default function SpaceScene() {
     disposables.push(rippleMat);
 
     // --- Distant companion UFO (adds life, kept small + subtle) -------------
-    const { group: smallUfo } = buildUfo(0.45, 0xa78bfa, false, disposables);
+    const { group: smallUfo, ring: smallRing, bulbs: smallBulbs } = buildUfo(0.45, 0xa78bfa, true, disposables);
     smallUfo.position.set(0, 3.2, -6);
     scene.add(smallUfo);
+
+    // --- Second, tinier companion drifting the opposite way -----------------
+    const { group: tinyUfo, ring: tinyRing, bulbs: tinyBulbs } = buildUfo(0.28, 0x7dd3fc, true, disposables);
+    tinyUfo.position.set(4, -3.5, -10);
+    scene.add(tinyUfo);
 
     // --- Ringed planet (background) -----------------------------------------
     const planet = new THREE.Group();
@@ -416,10 +461,38 @@ export default function SpaceScene() {
       ufoFx.position.copy(ufo.position);
       beamMat.opacity = 0.12 + 0.08 * (0.5 + 0.5 * Math.sin(t * 2));
 
+      // Hero ship detail animation: spin the rings, pulse the dome, blink the
+      // under-lights in a chase so the saucer feels alive.
+      ufoRing.rotation.z += dt * 0.6;
+      ufoRim.rotation.z -= dt * 0.9;
+      ufoDomeMat.emissiveIntensity = 0.7 + 0.4 * (0.5 + 0.5 * Math.sin(t * 1.3));
+      ufoBulbs.forEach((b, i) => {
+        const phase = (t * 3 + (i / ufoBulbs.length) * Math.PI * 2) % (Math.PI * 2);
+        const lit = Math.sin(phase) > 0.4;
+        (b.material as THREE.MeshStandardMaterial).emissiveIntensity = lit ? 5 : 1.2;
+      });
+
       // Companion UFO drifts slowly across the back.
       smallUfo.position.x = Math.sin(t * 0.15) * 4.5;
       smallUfo.position.y = 3.2 + Math.sin(t * 0.2) * 1.2;
       smallUfo.rotation.y += dt * 0.2;
+      smallRing.rotation.z += dt * 0.8;
+      smallBulbs.forEach((b, i) => {
+        const phase = (t * 2.4 + (i / smallBulbs.length) * Math.PI * 2) % (Math.PI * 2);
+        (b.material as THREE.MeshStandardMaterial).emissiveIntensity =
+          Math.sin(phase) > 0.4 ? 4 : 1;
+      });
+
+      // Tiny companion crosses the lower field on its own lazy path.
+      tinyUfo.position.x = 4 + Math.sin(t * 0.1) * 3;
+      tinyUfo.position.y = -3.5 + Math.cos(t * 0.13) * 1;
+      tinyUfo.rotation.y += dt * 0.25;
+      tinyRing.rotation.z -= dt * 1.1;
+      tinyBulbs.forEach((b, i) => {
+        const phase = (t * 3.2 + (i / tinyBulbs.length) * Math.PI * 2) % (Math.PI * 2);
+        (b.material as THREE.MeshStandardMaterial).emissiveIntensity =
+          Math.sin(phase) > 0.4 ? 3.5 : 0.9;
+      });
 
       planet.rotation.y += dt * 0.06;
       planet.position.x = planetHome.x + pointer.x * 1.0 + Math.sin(t * 0.1) * 0.4;

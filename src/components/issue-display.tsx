@@ -102,7 +102,7 @@ export function IssueRow({ issue }: { issue: IssueDTO }) {
   return (
     <Link
       href={`/issues/${issue.identifier}`}
-      className="group flex items-center gap-3 rounded-xl border border-[--border] bg-[--surface]/60 px-4 py-3 backdrop-blur-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[--border-strong] hover:bg-[--surface-hover]/80 hover:shadow-[0_14px_34px_-22px_rgba(var(--glow),0.55)]"
+      className="group flex items-center gap-3 rounded-xl border border-[--border] bg-[--surface]/60 px-4 py-3 backdrop-blur-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_55%,transparent)] hover:bg-[--surface-hover]/80 hover:shadow-[0_14px_34px_-22px_rgba(var(--glow),0.55),0_0_0_1px_color-mix(in_srgb,var(--accent)_35%,transparent),0_0_22px_-6px_rgba(var(--glow),0.6)]"
     >
       <span className="font-mono text-xs text-[--foreground-subtle] w-20 shrink-0">
         {issue.identifier}

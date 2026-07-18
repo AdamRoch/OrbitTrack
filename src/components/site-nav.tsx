@@ -42,7 +42,7 @@ export function SiteNav() {
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-4">
-        <nav className="glass flex items-center gap-1 rounded-full px-2 py-1.5 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95)]">
+        <nav className="glass glow-edge-pulse flex items-center gap-1 rounded-full px-2 py-1.5 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95)]">
           <Link
             href="/"
             className="group mr-1 flex items-center gap-2 rounded-full px-3 py-1.5"

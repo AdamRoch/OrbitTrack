@@ -252,6 +252,118 @@ body {
   transform: translateY(-6px) rotate(-45deg);
 }
 
+/* ---------------------------------------------------------------------------
+ * Green glowing edges + dynamic motion utilities.
+ *
+ * Reusable accents so every surface can borrow the alien lime glow and a bit
+ * of life without re-declaring the same box-shadow soup inline.
+ * ------------------------------------------------------------------------- */
+.glow-edge {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 0 22px -6px rgba(var(--glow), 0.55),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+.glow-edge-strong {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-strong));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 0 34px -4px rgba(var(--glow), 0.7),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+}
+.glow-edge-pulse {
+  animation: edge-pulse 3.2s ease-in-out infinite;
+}
+@keyframes edge-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
+      0 0 18px -6px rgba(var(--glow), 0.45),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent),
+      0 0 34px -4px rgba(var(--glow), 0.75),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  }
+}
+
+/*
+ * Ticket panel — a more opaque, lime-edged tray that sits *under* the issue
+ * rows so they stay legible against the moving 3D backdrop. A faint scan line
+ * sweeps across it for extra life.
+ */
+.ticket-panel {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 15, 24, 0.86),
+    rgba(6, 10, 18, 0.92)
+  );
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-strong));
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 0 40px -10px rgba(var(--glow), 0.45),
+    0 30px 60px -34px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+}
+.ticket-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    transparent 42%,
+    rgba(var(--glow), 0.1) 50%,
+    transparent 58%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  animation: panel-scan 6.5s linear infinite;
+}
+@keyframes panel-scan {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+/* Gentle ambient motion utilities. */
+.float-soft {
+  animation: float-soft 5s ease-in-out infinite;
+}
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.drift-x {
+  animation: drift-x 9s ease-in-out infinite;
+}
+@keyframes drift-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+
 @keyframes twinkle {
   0%,
   100% {
@@ -439,7 +551,11 @@ body {
   .graph-legend-pulse,
   .starfield,
   .starfield-2,
-  .nebula {
+  .nebula,
+  .glow-edge-pulse,
+  .ticket-panel::before,
+  .float-soft,
+  .drift-x {
     animation: none;
   }
   .reveal {
