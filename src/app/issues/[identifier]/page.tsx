@@ -30,12 +30,10 @@ export default async function IssueDetailPage({
   const issue = getIssue(db, identifier);
   if (!issue) notFound();
 
-  const [blockers, blockedBy, allLabels, descriptionHtml] = await Promise.all([
-    getBlockers(db, identifier) ?? [],
-    getBlockedBy(db, identifier) ?? [],
-    Promise.resolve(listLabels(db)),
-    renderMarkdown(issue.description),
-  ]);
+  const descriptionHtml = await renderMarkdown(issue.description);
+  const blockers = getBlockers(db, identifier) ?? [];
+  const blockedBy = getBlockedBy(db, identifier) ?? [];
+  const allLabels = listLabels(db);
 
   return (
     <div className="max-w-3xl">

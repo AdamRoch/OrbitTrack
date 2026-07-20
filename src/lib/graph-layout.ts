@@ -63,7 +63,7 @@ function edgeId(source: number, target: number): string {
  *   deleted) are dropped — the cascade already removed the row, but this keeps
  *   the view robust if the payload is ever stale.
  */
-export function buildGraph(
+function buildGraph(
   issues: GraphIssue[],
 ): { nodes: IssueNode[]; edges: Edge[] } {
   const ids = new Set(issues.map((i) => i.id));
@@ -111,7 +111,7 @@ export function buildGraph(
  * through unchanged (dagre only needs them for ranking). Nodes with no edges
  * still get a position — dagre stacks them in a column.
  */
-export function layoutWithDagre(
+function layoutWithDagre(
   nodes: IssueNode[],
   edges: Edge[],
 ): IssueNode[] {

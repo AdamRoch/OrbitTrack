@@ -76,12 +76,3 @@ export function RadarIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
-export function PlanetIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...base} {...props}>
-      <circle cx="12" cy="12" r="6.5" />
-      <ellipse cx="12" cy="12" rx="10" ry="3.2" transform="rotate(-22 12 12)" opacity="0.7" />
-    </svg>
-  );
-}

@@ -2,7 +2,7 @@ import { and, desc, asc, eq, inArray, ne, sql, isNull } from "drizzle-orm";
 import type { DB } from "./db";
 import * as s from "./db/schema";
 import type { IssueStatus, Priority, LabelRow } from "./db/schema";
-import { toIssueDTO, toIssueDTOs } from "./serialize";
+import { toIssueDTO, toIssueDTOs, toQuestionDTO } from "./serialize";
 import type { IssueDTO, LabelDTO, QuestionDTO } from "./types";
 import { ValidationError } from "./validate";
 import { identifierFor, nextIssueNumber, resolveIssue } from "./identifiers";
@@ -274,19 +274,6 @@ export function deleteIssue(
 // Numbering is a per-issue sequence assigned atomically inside the create
 // transaction. See CONTEXT.md ("Question", "Open / Answered").
 
-/** Map a stored question row to its DTO, deriving `status` from `answeredAt`. */
-function toQuestionDTO(q: s.QuestionRow): QuestionDTO {
-  return {
-    id: q.id,
-    number: q.number,
-    question: q.question,
-    answer: q.answer,
-    status: q.answeredAt === null ? "open" : "answered",
-    createdAt: new Date(q.createdAt).toISOString(),
-    answeredAt: q.answeredAt === null ? null : new Date(q.answeredAt).toISOString(),
-  };
-}
-
 /**
  * List an issue's questions, oldest first. Exposed for the GET route and used
  * implicitly by the serializer (which embeds `questions[]` in every issue read).
@@ -461,7 +448,7 @@ export function listOpenQuestions(db: DB, label?: string): OpenQuestionEntry[] {
 }
 
 // ----------------------------------------------------------------------------
-// Labels
+// Claiming
 // ----------------------------------------------------------------------------
 
 export type ClaimResult =

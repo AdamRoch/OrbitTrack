@@ -62,15 +62,7 @@ export function toIssueDTO(db: DB, issue: s.IssueRow): IssueDTO {
     .where(eq(s.issueQuestions.issueId, issue.id))
     .orderBy(asc(s.issueQuestions.number))
     .all();
-  const questionDTOs: QuestionDTO[] = questionRows.map((q) => ({
-    id: q.id,
-    number: q.number,
-    question: q.question,
-    answer: q.answer,
-    status: q.answeredAt === null ? "open" : "answered",
-    createdAt: new Date(q.createdAt).toISOString(),
-    answeredAt: q.answeredAt === null ? null : new Date(q.answeredAt).toISOString(),
-  }));
+  const questionDTOs: QuestionDTO[] = questionRows.map(toQuestionDTO);
 
   const labelDTOs = labels as LabelDTO[];
 
@@ -107,4 +99,20 @@ export function toIssueDTO(db: DB, issue: s.IssueRow): IssueDTO {
 /** Serialize many issues in one pass. */
 export function toIssueDTOs(db: DB, issues: s.IssueRow[]): IssueDTO[] {
   return issues.map((i) => toIssueDTO(db, i));
+}
+
+/**
+ * Map a stored question row to its DTO, deriving `status` from `answeredAt`.
+ * Shared by the issue serializer and the domain question helpers.
+ */
+export function toQuestionDTO(q: s.QuestionRow): QuestionDTO {
+  return {
+    id: q.id,
+    number: q.number,
+    question: q.question,
+    answer: q.answer,
+    status: q.answeredAt === null ? "open" : "answered",
+    createdAt: new Date(q.createdAt).toISOString(),
+    answeredAt: q.answeredAt === null ? null : new Date(q.answeredAt).toISOString(),
+  };
 }
