@@ -155,3 +155,10 @@ All errors use a stable envelope:
 A row `(blocker=A, blocked=B)` reads "**A blocks B**". The graph is kept a DAG:
 self-edges and cycles are rejected at write time.
 <!-- END:tracker-integration -->
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
