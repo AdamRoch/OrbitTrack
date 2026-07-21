@@ -14,9 +14,9 @@ export interface LabelDTO {
 /**
  * A project — the top-level scope for issues. The `key` IS the identifier
  * prefix (e.g. "LIN" → `LIN-42`). `nextNumber` is the per-project high-water
- * counter; it is exposed so callers can see what number the next issue will
- * receive. The first project by id is the default scope for API requests that
- * don't pass `?project=KEY`.
+ * counter — the number most recently assigned; the next issue receives
+ * `nextNumber + 1`. The first project by id is the default scope for API
+ * requests that don't pass `?project=KEY`.
  */
 export interface ProjectDTO {
   id: number;

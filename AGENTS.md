@@ -111,7 +111,7 @@ project's key is `404` (no cross-project leakage).
 | `DELETE` | `/api/issues/:id` | — | `204`. |
 | `PUT` | `/api/issues/:id/labels` | `{ labelNames: string[] }` | Full replacement. Labels are global across projects. |
 | `GET` | `/api/issues/:id/blockers` | — | Issues blocking this one. |
-| `POST` | `/api/issues/:id/blockers` | `{ blockerId: number\|string }` | Creates edge "A blocks B". `400` on self-edge/cycle/cross-project. |
+| `POST` | `/api/issues/:id/blockers` | `{ blockerId: number\|string }` | Creates edge "A blocks B". `400` on self-edge/cycle; cross-project edges are `404` (the scoped resolver refuses foreign identifiers before the cross-project guard fires). |
 | `DELETE` | `/api/issues/:id/blockers/:blockerId` | — | Removes edge. |
 | `GET` | `/api/issues/:id/questions` | — | The issue's Q&A history (also in `Issue.questions`). |
 | `POST` | `/api/issues/:id/questions` | `{ question }` | Ask a clarification. Requires `in_progress`; `409 not_in_progress` otherwise. Per-issue numbering. |

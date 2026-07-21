@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getIssue, getBlockers, getBlockedBy, listLabels, listProjects } from "@/lib/domain";
+import { getIssue, getBlockers, getBlockedBy, listLabels } from "@/lib/domain";
 import { getServerDb, getServerProject } from "@/lib/server-data";
 import { renderMarkdown } from "@/lib/markdown";
 import {
@@ -48,10 +48,7 @@ export default async function IssueDetailPage({
     renderMarkdown(issue.description),
   ]);
 
-  // Show the switcher only when more than one project exists; otherwise the
-  // detail page is implicitly scoped. We don't render it inline here (it would
-  // muddy the layout) — the back-link carries the project context.
-  const _projects = listProjects(db);
+  // The back-link carries the project context.
   const backHref = `/?project=${project.key}`;
 
   return (

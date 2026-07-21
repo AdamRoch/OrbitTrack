@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import * as schema from "./schema";
+import { PROJECT_PREFIX } from "../config";
 const { labels, projects } = schema;
 
 export type DB = BetterSQLite3Database<typeof schema>;
@@ -79,19 +80,17 @@ export function resetDbCache(): void {
 }
 
 /**
- * One-time pre-migration snapshot. When the `issue_questions` table does not
- * yet exist on a DB that already holds real data, dump issues / labels /
- * issue_labels / dependencies to a timestamped markdown file alongside the DB.
+ * One-time pre-migration snapshot. When a legacy pre-projects DB is detected
+ * (an `issues` table with no `project_id` column) and it holds real data, dump
+ * issues / labels / issue_labels / dependencies / issue_questions to a
+ * timestamped markdown file alongside the DB before the table rebuild runs.
  * Best-effort: any failure is logged and swallowed — it must never block startup.
  */
-function snapshotBeforeQuestionsMigration(raw: Database.Database): void {
+function snapshotBeforeProjectsMigration(raw: Database.Database): void {
   try {
-    const hasQuestionsTable = raw
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='issue_questions'",
-      )
-      .get() as { name?: string } | undefined;
-    if (hasQuestionsTable) return; // already migrated
+    if (!tableExists(raw, "issues") || columnExists(raw, "issues", "project_id")) {
+      return; // fresh DB or already migrated
+    }
 
     const issueCount = raw.prepare("SELECT COUNT(*) AS n FROM issues").get() as {
       n: number;
@@ -110,6 +109,9 @@ function snapshotBeforeQuestionsMigration(raw: Database.Database): void {
         "SELECT * FROM dependencies ORDER BY blocker_issue_id, blocked_issue_id",
       )
       .all() as unknown[];
+    const questions = tableExists(raw, "issue_questions")
+      ? (raw.prepare("SELECT * FROM issue_questions ORDER BY id").all() as unknown[])
+      : [];
 
     const lines: string[] = [
       "# Pre-migration snapshot",
@@ -139,6 +141,11 @@ function snapshotBeforeQuestionsMigration(raw: Database.Database): void {
       JSON.stringify(deps, null, 2),
       "```",
       "",
+      "## issue_questions",
+      "```json",
+      JSON.stringify(questions, null, 2),
+      "```",
+      "",
     ];
 
     const dir = dirname(dbPath());
@@ -161,7 +168,7 @@ function snapshotBeforeQuestionsMigration(raw: Database.Database): void {
  */
 function ensureSchema(raw: Database.Database): void {
   // Belt-and-braces backup before any potentially-destructive migration.
-  snapshotBeforeQuestionsMigration(raw);
+  snapshotBeforeProjectsMigration(raw);
 
   // Legacy DB detection: an `issues` table that predates the projects schema
   // has no `project_id` column and has `number` declared UNIQUE at the table
@@ -258,8 +265,24 @@ function ensureSchema(raw: Database.Database): void {
  *
  * Idempotent: detecting `issues.project_id` already present short-circuits the
  * whole thing (caller's responsibility).
+ *
+ * The rebuild runs as a single transaction with foreign-key enforcement off:
+ * `DROP TABLE issues` would otherwise cascade-delete every issue_labels /
+ * dependencies / issue_questions row, and a crash mid-rebuild would otherwise
+ * strand all data in `issues_new`. PRAGMA foreign_keys is a no-op inside a
+ * transaction, so it is toggled outside it.
  */
 function migrateLegacyIssuesTable(raw: Database.Database): void {
+  const fkBefore = raw.pragma("foreign_keys", { simple: true });
+  raw.pragma("foreign_keys = OFF");
+  try {
+    raw.transaction(() => rebuildLegacyIssuesTable(raw))();
+  } finally {
+    raw.pragma(`foreign_keys = ${fkBefore ? "ON" : "OFF"}`);
+  }
+}
+
+function rebuildLegacyIssuesTable(raw: Database.Database): void {
   // Step 1: create the projects table so we can reference it.
   raw.exec(`
     CREATE TABLE IF NOT EXISTS projects (
@@ -272,7 +295,8 @@ function migrateLegacyIssuesTable(raw: Database.Database): void {
   `);
 
   // Step 2: ensure a default project and seed its sequence. The default key
-  // comes from PROJECT_PREFIX (defaults to "LIN" — see config.ts).
+  // comes from PROJECT_PREFIX (TRACKER_PREFIX env, default "LIN" — see
+  // config.ts).
   const defaultProject = ensureDefaultProject(raw);
 
   // Seed from the legacy high-water counter if present (preferred — it is the
@@ -360,9 +384,10 @@ function columnExists(raw: Database.Database, table: string, col: string): boole
 }
 
 /**
- * Ensure the default project exists (key from PROJECT_PREFIX env, default LIN).
- * Idempotent: returns the existing row if present. The first project by id is
- * the "default" for API requests that don't specify `?project=KEY`.
+ * Ensure the default project exists (key from the TRACKER_PREFIX env var,
+ * default LIN — see PROJECT_PREFIX in config.ts). Idempotent: returns the
+ * existing row if present. The first project by id is the "default" for API
+ * requests that don't specify `?project=KEY`.
  *
  * Returns the plain row shape used by the migration path; live code reads the
  * project through Drizzle.
@@ -373,7 +398,7 @@ function ensureDefaultProject(raw: Database.Database): {
   name: string;
   nextNumber: number;
 } {
-  const key = (process.env.TRACKER_PREFIX?.trim() || "LIN").toUpperCase();
+  const key = PROJECT_PREFIX;
   const existing = raw
     .prepare("SELECT id, key, name, next_number FROM projects WHERE key = ?")
     .get(key) as

@@ -30,12 +30,13 @@ export function getServerProject(
 ): ProjectRow | null {
   const trimmed = key?.trim();
   if (trimmed && trimmed.length > 0) {
-    const explicit = db
-      .select()
-      .from(schema.projects)
-      .where(eq(schema.projects.key, trimmed.toUpperCase()))
-      .get();
-    if (explicit) return explicit;
+    return (
+      db
+        .select()
+        .from(schema.projects)
+        .where(eq(schema.projects.key, trimmed.toUpperCase()))
+        .get() ?? null
+    );
   }
   return getDefaultProject(db);
 }

@@ -99,6 +99,16 @@ describe("legacy DB migration to multi-project schema", () => {
         blocked_issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
         PRIMARY KEY (blocker_issue_id, blocked_issue_id)
       );
+      CREATE TABLE issue_questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        number INTEGER NOT NULL,
+        question TEXT NOT NULL,
+        answer TEXT,
+        created_at INTEGER NOT NULL,
+        answered_at INTEGER,
+        UNIQUE(issue_id, number)
+      );
       CREATE TABLE meta (
         key TEXT PRIMARY KEY,
         value INTEGER NOT NULL
@@ -121,6 +131,21 @@ describe("legacy DB migration to multi-project schema", () => {
       "issue_number_seq",
       5,
     );
+    // Child-table rows: the migration's DROP TABLE issues must NOT cascade
+    // these away (that's the data-loss regression this seed guards against).
+    raw.prepare("INSERT INTO labels (name, color) VALUES (?, ?)").run(
+      "bug",
+      "#ef4444",
+    );
+    raw.prepare(
+      "INSERT INTO issue_labels (issue_id, label_id) VALUES (1, 1)",
+    ).run();
+    raw.prepare(
+      "INSERT INTO dependencies (blocker_issue_id, blocked_issue_id) VALUES (1, 2)",
+    ).run();
+    raw.prepare(
+      "INSERT INTO issue_questions (issue_id, number, question, answer, created_at, answered_at) VALUES (2, 1, ?, ?, ?, ?)",
+    ).run("which cache?", "per-request", now, now);
     raw.close();
 
     // Sanity: the DB on disk is the legacy shape.
@@ -179,6 +204,47 @@ describe("legacy DB migration to multi-project schema", () => {
     const fifthBody = await fifth.json();
     expect(fifthBody.title).toBe("fifth (gap from delete)");
     expect(fifthBody.priority).toBe(0);
+  });
+
+  it("preserves label links, dependencies, and questions through the rebuild", async () => {
+    const raw = new Database(dbPath);
+    expect(
+      raw.prepare("SELECT issue_id, label_id FROM issue_labels").all(),
+    ).toEqual([{ issue_id: 1, label_id: 1 }]);
+    expect(
+      raw
+        .prepare("SELECT blocker_issue_id, blocked_issue_id FROM dependencies")
+        .all(),
+    ).toEqual([{ blocker_issue_id: 1, blocked_issue_id: 2 }]);
+    expect(
+      raw
+        .prepare("SELECT issue_id, number, question, answer FROM issue_questions")
+        .all(),
+    ).toEqual([
+      { issue_id: 2, number: 1, question: "which cache?", answer: "per-request" },
+    ]);
+    raw.close();
+
+    // And the API sees them attached to the migrated issues.
+    const first = await fetch(`${base}/api/issues/LIN-1?project=LIN`);
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(
+      firstBody.labels.map((l: { name: string }) => l.name),
+    ).toContain("bug");
+
+    const second = await fetch(`${base}/api/issues/LIN-2?project=LIN`);
+    expect(second.status).toBe(200);
+    const body = await second.json();
+    expect(body.questions.length).toBe(1);
+    expect(body.questions[0].question).toBe("which cache?");
+
+    const blockers = await fetch(`${base}/api/issues/LIN-2/blockers?project=LIN`);
+    expect(blockers.status).toBe(200);
+    const blockerList = await blockers.json();
+    expect(
+      blockerList.map((b: { identifier: string }) => b.identifier),
+    ).toEqual(["LIN-1"]);
   });
 
   it("schema on disk has the new shape after migration", async () => {
