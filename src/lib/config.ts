@@ -1,9 +1,11 @@
 /**
- * Project-wide constants. The prefix is the only thing that varies the
- * identifier scheme; everything else is fixed vocabulary.
+ * Project-wide constants. Multi-project support lives in the `projects` table;
+ * the value below is the *key* used to seed the default project on first boot
+ * (and to backfill a legacy single-project DB). After boot, each project's
+ * identifier prefix is its own `key`.
  */
 export const PROJECT_PREFIX =
-  process.env.TRACKER_PREFIX?.trim() || "LIN";
+  (process.env.TRACKER_PREFIX?.trim() || "LIN").toUpperCase();
 
 /** Suggested defaults seeded into a fresh DB (see db#seedDefaultsIfNeeded). */
 export const SEED_DEFAULT_LABELS = process.env.TRACKER_SEED !== "false";

@@ -25,17 +25,22 @@ import { Pencil, Trash2, Play, Check, X, Plus } from "lucide-react";
  * inline edit form, claim/delete buttons, label editor, and dependency
  * add/remove. Each control dispatches a server action and reads back the
  * result via useActionState for inline feedback.
+ *
+ * `projectKey` is the active project scope. Every form carries it as a hidden
+ * field so server actions resolve the issue within the right project.
  */
 export function IssueDetailForms({
   issue,
   allLabels,
   blockers,
   blockedBy,
+  projectKey,
 }: {
   issue: IssueDTO;
   allLabels: LabelDTO[];
   blockers: IssueDTO[];
   blockedBy: IssueDTO[];
+  projectKey: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [showAddBlocker, setShowAddBlocker] = useState(false);
@@ -69,6 +74,7 @@ export function IssueDetailForms({
       <div className="flex flex-wrap items-center gap-2 pb-4 border-b border-[--border]">
         {issue.status === "todo" || issue.status === "in_progress" ? (
           <form action={claimAction}>
+            <input type="hidden" name="projectKey" value={projectKey} />
             <Button type="submit" variant="primary" size="sm" icon={<Play size={13} />}>
               {issue.status === "in_progress" ? "Re-claim" : "Claim"}
             </Button>
@@ -82,7 +88,7 @@ export function IssueDetailForms({
         >
           {editing ? "Cancel edit" : "Edit"}
         </Button>
-        <DeleteButton identifier={issue.identifier} />
+        <DeleteButton identifier={issue.identifier} projectKey={projectKey} />
       </div>
 
       {claimState && !claimState.ok && claimState.error && (
@@ -94,6 +100,7 @@ export function IssueDetailForms({
 
       {editing && (
         <form action={updateAction} className="glass space-y-4 rounded-2xl border border-[--border] p-4">
+          <input type="hidden" name="projectKey" value={projectKey} />
           <Field label="Title">
             <Input name="title" defaultValue={issue.title} />
           </Field>
@@ -142,6 +149,7 @@ export function IssueDetailForms({
           </p>
         ) : (
           <form action={labelsAction} className="space-y-2">
+            <input type="hidden" name="projectKey" value={projectKey} />
             <div className="flex flex-wrap gap-2">
               {allLabels
                 .filter(
@@ -199,6 +207,7 @@ export function IssueDetailForms({
                 <RemoveBlockerButton
                   identifier={issue.identifier}
                   blockerId={String(b.id)}
+                  projectKey={projectKey}
                 />
               </li>
             ))}
@@ -217,9 +226,10 @@ export function IssueDetailForms({
               if (e.key === "Escape") setShowAddBlocker(false);
             }}
           >
+            <input type="hidden" name="projectKey" value={projectKey} />
             <Input
               name="blockerId"
-              placeholder="LIN-42 or issue id"
+              placeholder={`${projectKey}-42 or issue id`}
               autoFocus
               className="h-9 text-sm"
             />
@@ -260,7 +270,7 @@ export function IssueDetailForms({
             {blockedBy.map((b) => (
               <li key={b.id}>
                 <a
-                  href={`/issues/${b.identifier}`}
+                  href={`/issues/${b.identifier}?project=${b.identifier.split("-")[0]}`}
                   className="group flex items-center gap-2 rounded-xl border border-[--border] bg-[--surface]/60 px-3 py-2 text-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[--border-strong] hover:bg-[--surface-hover]/80"
                 >
                   <span className="font-mono text-xs text-[--foreground-subtle]">
@@ -288,7 +298,13 @@ function ErrorNote({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DeleteButton({ identifier }: { identifier: string }) {
+function DeleteButton({
+  identifier,
+  projectKey,
+}: {
+  identifier: string;
+  projectKey: string;
+}) {
   const boundDelete = deleteIssueAction.bind(null, identifier);
   const [state, dispatch] = useActionState(boundDelete, { ok: true });
   const [confirming, setConfirming] = useState(false);
@@ -308,6 +324,7 @@ function DeleteButton({ identifier }: { identifier: string }) {
   }
   return (
     <form action={dispatch} className="inline-flex items-center gap-2">
+      <input type="hidden" name="projectKey" value={projectKey} />
       <span className="text-xs text-[--foreground-muted]">Delete this issue?</span>
       <Button variant="danger" size="sm" type="submit">
         <Check size={13} />
@@ -331,14 +348,17 @@ function DeleteButton({ identifier }: { identifier: string }) {
 function RemoveBlockerButton({
   identifier,
   blockerId,
+  projectKey,
 }: {
   identifier: string;
   blockerId: string;
+  projectKey: string;
 }) {
   const bound = removeBlockerAction.bind(null, identifier, blockerId);
   const [_state, dispatch] = useActionState(bound, { ok: true });
   return (
     <form action={dispatch}>
+      <input type="hidden" name="projectKey" value={projectKey} />
       <button
         type="submit"
         className="text-[--foreground-subtle] hover:text-[--danger] p-1"

@@ -13,7 +13,7 @@ import {
   createLabel,
   deleteLabel,
 } from "@/lib/domain";
-import { getServerDb } from "@/lib/server-data";
+import { getServerDb, getServerProject } from "@/lib/server-data";
 import {
   ValidationError,
   optionalDescription,
@@ -26,6 +26,7 @@ import {
   parseColor,
   parseLabelName,
 } from "@/lib/validate";
+import type { ProjectRow } from "@/lib/db/schema";
 
 /**
  * Server actions — the UI's mutation seam. They go through the same domain
@@ -36,6 +37,11 @@ import {
  * Every action shares one return shape so `useActionState` typings line up
  * uniformly across forms. Creates additionally carry `identifier` so the
  * client can navigate to the new issue's detail page.
+ *
+ * Project scope: every action takes a `projectKey` (the active project from
+ * the switcher). When absent/empty the default project is used. Identifier
+ * resolution is project-scoped so an action targeting `OEMR-1` while the
+ * active scope is `LIN` is "not found" — no cross-project leakage.
  */
 export interface ActionResult {
   ok: boolean;
@@ -57,13 +63,39 @@ function isRedirectError(e: unknown): boolean {
   );
 }
 
+/** Resolve the active project from a form-submitted key (or default). */
+function resolveProject(projectKey: string | undefined): {
+  db: ReturnType<typeof getServerDb>;
+  project: ProjectRow;
+} {
+  const db = getServerDb();
+  const project = getServerProject(db, projectKey);
+  if (!project) {
+    throw new ValidationError(
+      projectKey
+        ? `project "${projectKey}" not found`
+        : "no projects exist",
+      "project_not_found",
+    );
+  }
+  return { db, project };
+}
+
 // ---- Issues ----
 
 export async function createIssueAction(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const db = getServerDb();
+  const projectKey = formData.get("projectKey")?.toString() || undefined;
+  let db: ReturnType<typeof getServerDb>;
+  let project: ProjectRow;
+  try {
+    ({ db, project } = resolveProject(projectKey));
+  } catch (e) {
+    if (e instanceof ValidationError) return fail(e.message);
+    throw e;
+  }
   try {
     const title = requireTitle(formData.get("title"));
     const description = optionalDescription(formData.get("description"));
@@ -72,7 +104,7 @@ export async function createIssueAction(
     const labelNames = parseLabelNames(
       (formData.getAll("labelNames") as string[]).filter(Boolean),
     );
-    const issue = createIssue(db, {
+    const issue = createIssue(db, project, {
       title,
       description,
       status,
@@ -81,7 +113,7 @@ export async function createIssueAction(
     });
     revalidatePath("/");
     revalidatePath("/frontier");
-    redirect(`/issues/${issue.identifier}`);
+    redirect(`/issues/${issue.identifier}?project=${project.key}`);
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     if (isRedirectError(e)) throw e; // redirect() must propagate
@@ -94,9 +126,17 @@ export async function updateIssueAction(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const db = getServerDb();
+  const projectKey = formData.get("projectKey")?.toString() || undefined;
+  let db: ReturnType<typeof getServerDb>;
+  let project: ProjectRow;
   try {
-    const args: Parameters<typeof updateIssue>[2] = {};
+    ({ db, project } = resolveProject(projectKey));
+  } catch (e) {
+    if (e instanceof ValidationError) return fail(e.message);
+    throw e;
+  }
+  try {
+    const args: Parameters<typeof updateIssue>[3] = {};
     const title = formData.get("title");
     if (title !== null) args.title = requireTitle(title);
     const description = formData.get("description");
@@ -106,7 +146,7 @@ export async function updateIssueAction(
     const priority = formData.get("priority");
     if (priority !== null) args.priority = parsePriority(priority as string);
 
-    const updated = updateIssue(db, identifier, args);
+    const updated = updateIssue(db, project, identifier, args);
     if (!updated) return fail("issue not found");
     revalidatePath(`/issues/${identifier}`);
     revalidatePath("/");
@@ -123,21 +163,42 @@ export async function deleteIssueAction(
   _prev: ActionResult,
   _formData?: FormData,
 ): Promise<ActionResult> {
-  const db = getServerDb();
-  const ok = deleteIssue(db, identifier);
+  // deleteIssueAction is invoked from the detail page, where projectKey is
+  // passed as a hidden field by IssueDetailForms. The legacy signature (no
+  // formData) is preserved for callers that haven't been updated; they fall
+  // back to the default project.
+  const formData = _formData ?? new FormData();
+  const projectKey = formData.get("projectKey")?.toString() || undefined;
+  let db: ReturnType<typeof getServerDb>;
+  let project: ProjectRow;
+  try {
+    ({ db, project } = resolveProject(projectKey));
+  } catch (e) {
+    if (e instanceof ValidationError) return fail(e.message);
+    throw e;
+  }
+  const ok = deleteIssue(db, project, identifier);
   if (!ok) return fail("issue not found");
   revalidatePath("/");
   revalidatePath("/frontier");
-  redirect("/");
+  redirect(`/?project=${project.key}`);
 }
 
 export async function claimIssueAction(
   identifier: string,
   _prev: ActionResult,
-  _formData?: FormData,
+  formData: FormData,
 ): Promise<ActionResult> {
-  const db = getServerDb();
-  const result = claimIssue(db, identifier);
+  const projectKey = formData.get("projectKey")?.toString() || undefined;
+  let db: ReturnType<typeof getServerDb>;
+  let project: ProjectRow;
+  try {
+    ({ db, project } = resolveProject(projectKey));
+  } catch (e) {
+    if (e instanceof ValidationError) return fail(e.message);
+    throw e;
+  }
+  const result = claimIssue(db, project, identifier);
   if (!result.ok) {
     if (result.reason === "not_found") {
       return fail("issue not found");
@@ -158,12 +219,20 @@ export async function setIssueLabelsAction(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const db = getServerDb();
+  const projectKey = formData.get("projectKey")?.toString() || undefined;
+  let db: ReturnType<typeof getServerDb>;
+  let project: ProjectRow;
+  try {
+    ({ db, project } = resolveProject(projectKey));
+  } catch (e) {
+    if (e instanceof ValidationError) return fail(e.message);
+    throw e;
+  }
   try {
     const labelNames = (formData.getAll("labelNames") as string[]).filter(
       Boolean,
     );
-    const updated = setIssueLabels(db, identifier, labelNames);
+    const updated = setIssueLabels(db, project, identifier, labelNames);
     if (!updated) return fail("issue not found");
     revalidatePath(`/issues/${identifier}`);
     return { ok: true };
@@ -180,13 +249,21 @@ export async function addBlockerAction(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const db = getServerDb();
+  const projectKey = formData.get("projectKey")?.toString() || undefined;
+  let db: ReturnType<typeof getServerDb>;
+  let project: ProjectRow;
+  try {
+    ({ db, project } = resolveProject(projectKey));
+  } catch (e) {
+    if (e instanceof ValidationError) return fail(e.message);
+    throw e;
+  }
   try {
     const blockerId = formData.get("blockerId") as string;
     if (!blockerId || !blockerId.trim()) {
       return fail("blocker id or identifier is required");
     }
-    const result = addBlocker(db, identifier, blockerId.trim());
+    const result = addBlocker(db, project, identifier, blockerId.trim());
     if (result === null) return fail("issue not found");
     revalidatePath(`/issues/${identifier}`);
     return { ok: true };
@@ -202,8 +279,17 @@ export async function removeBlockerAction(
   _prev: ActionResult,
   _formData?: FormData,
 ): Promise<ActionResult> {
-  const db = getServerDb();
-  const result = removeBlocker(db, identifier, blockerId);
+  const formData = _formData ?? new FormData();
+  const projectKey = formData.get("projectKey")?.toString() || undefined;
+  let db: ReturnType<typeof getServerDb>;
+  let project: ProjectRow;
+  try {
+    ({ db, project } = resolveProject(projectKey));
+  } catch (e) {
+    if (e instanceof ValidationError) return fail(e.message);
+    throw e;
+  }
+  const result = removeBlocker(db, project, identifier, blockerId);
   if (result === null) return fail("issue not found");
   if (result === false) return fail("dependency edge not found");
   revalidatePath(`/issues/${identifier}`);

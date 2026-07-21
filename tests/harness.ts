@@ -11,12 +11,18 @@ import { afterAll, beforeAll } from "vitest";
  * Boots a real Next.js dev server on a random port, pointed at a throwaway
  * SQLite file in a temp dir. Exposes a `fetch`-style helper plus typed sugar
  * for the agent API. The server is shared across tests in a file; a fresh DB
- * means every file starts from a known-empty state.
+ * means every file starts from a known-empty state (with a single default
+ * project whose key matches TRACKER_PREFIX, i.e. "LIN").
  *
  * We boot Next in dev mode rather than via a custom server so the route
  * handlers run through the real App Router pipeline — which is what we want
  * to exercise (it's the agent contract).
  */
+
+/** Optional per-call options. Most helpers accept a `projectKey` to scope. */
+export interface CallOpts {
+  projectKey?: string;
+}
 
 export interface Harness {
   base: string;
@@ -26,19 +32,34 @@ export interface Harness {
   // ---- Typed sugar for the common operations tests use ----
   createIssue: (
     body: Record<string, unknown>,
+    opts?: CallOpts,
   ) => Promise<{ status: number; body: any }>;
-  getIssue: (id: string) => Promise<{ status: number; body: any }>;
-  frontier: () => Promise<{ status: number; body: any }>;
-  listIssues: (qs?: string) => Promise<{ status: number; body: any }>;
-  claim: (id: string) => Promise<{ status: number; body: any }>;
+  getIssue: (
+    id: string,
+    opts?: CallOpts,
+  ) => Promise<{ status: number; body: any }>;
+  frontier: (opts?: CallOpts) => Promise<{ status: number; body: any }>;
+  listIssues: (
+    qs?: string,
+    opts?: CallOpts,
+  ) => Promise<{ status: number; body: any }>;
+  claim: (
+    id: string,
+    opts?: CallOpts,
+  ) => Promise<{ status: number; body: any }>;
   patchIssue: (
     id: string,
     body: Record<string, unknown>,
+    opts?: CallOpts,
   ) => Promise<{ status: number; body: any }>;
-  deleteIssue: (id: string) => Promise<{ status: number }>;
+  deleteIssue: (
+    id: string,
+    opts?: CallOpts,
+  ) => Promise<{ status: number }>;
   setLabels: (
     id: string,
     labelNames: string[],
+    opts?: CallOpts,
   ) => Promise<{ status: number; body: any }>;
   listLabels: () => Promise<{ status: number; body: any }>;
   createLabel: (
@@ -48,20 +69,38 @@ export interface Harness {
   addBlocker: (
     id: string,
     blockerId: string | number,
+    opts?: CallOpts,
   ) => Promise<{ status: number; body: any }>;
-  removeBlocker: (id: string, blockerId: string) => Promise<{ status: number }>;
-  getBlockers: (id: string) => Promise<{ status: number; body: any }>;
+  removeBlocker: (
+    id: string,
+    blockerId: string,
+    opts?: CallOpts,
+  ) => Promise<{ status: number }>;
+  getBlockers: (
+    id: string,
+    opts?: CallOpts,
+  ) => Promise<{ status: number; body: any }>;
   addQuestion: (
     id: string,
     question: string,
+    opts?: CallOpts,
   ) => Promise<{ status: number; body: any }>;
-  getQuestions: (id: string) => Promise<{ status: number; body: any }>;
+  getQuestions: (
+    id: string,
+    opts?: CallOpts,
+  ) => Promise<{ status: number; body: any }>;
   respond: (
     id: string,
     number: number,
     answer: string,
+    opts?: CallOpts,
   ) => Promise<{ status: number; body: any }>;
   openQuestions: (qs?: string) => Promise<{ status: number; body: any }>;
+  // ---- Project API ----
+  listProjects: () => Promise<{ status: number; body: any }>;
+  createProject: (
+    body: Record<string, unknown>,
+  ) => Promise<{ status: number; body: any }>;
 }
 
 async function jsonResponse(res: Response): Promise<any> {
@@ -72,6 +111,13 @@ async function jsonResponse(res: Response): Promise<any> {
   } catch {
     return text;
   }
+}
+
+/** Append `?project=KEY` (or `&project=KEY`) to a path when scoped. */
+function withProject(path: string, opts?: CallOpts): string {
+  if (!opts?.projectKey) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}project=${encodeURIComponent(opts.projectKey)}`;
 }
 
 /**
@@ -107,6 +153,8 @@ export function createHarness(): Harness {
     getQuestions: async () => ({ status: 0, body: null }),
     respond: async () => ({ status: 0, body: null }),
     openQuestions: async () => ({ status: 0, body: null }),
+    listProjects: async () => ({ status: 0, body: null }),
+    createProject: async () => ({ status: 0, body: null }),
   };
 
   const doFetch = async (path: string, init?: RequestInit): Promise<Response> => {
@@ -121,42 +169,54 @@ export function createHarness(): Harness {
   };
 
   const sugar = {
-    createIssue: async (body: Record<string, unknown>) => {
-      const res = await doFetch("/api/issues", {
+    createIssue: async (body: Record<string, unknown>, opts?: CallOpts) => {
+      const res = await doFetch(withProject("/api/issues", opts), {
         method: "POST",
         body: JSON.stringify(body),
       });
       return { status: res.status, body: await jsonResponse(res) };
     },
-    getIssue: async (id: string) => {
-      const res = await doFetch(`/api/issues/${id}`);
+    getIssue: async (id: string, opts?: CallOpts) => {
+      const res = await doFetch(withProject(`/api/issues/${id}`, opts));
       return { status: res.status, body: await jsonResponse(res) };
     },
-    frontier: async () => {
-      const res = await doFetch("/api/issues/frontier");
+    frontier: async (opts?: CallOpts) => {
+      const res = await doFetch(withProject("/api/issues/frontier", opts));
       return { status: res.status, body: await jsonResponse(res) };
     },
-    listIssues: async (qs = "") => {
-      const res = await doFetch(`/api/issues${qs}`);
+    listIssues: async (qs = "", opts?: CallOpts) => {
+      // `qs` may already start with ?project=… or &project=…; withProject only
+      // appends when opts.projectKey is set, so passing both is fine (opts
+      // wins by being appended last and the server reading the last value).
+      const path = `/api/issues${qs}`;
+      const res = await doFetch(withProject(path, opts));
       return { status: res.status, body: await jsonResponse(res) };
     },
-    claim: async (id: string) => {
-      const res = await doFetch(`/api/issues/${id}/claim`, { method: "POST" });
+    claim: async (id: string, opts?: CallOpts) => {
+      const res = await doFetch(withProject(`/api/issues/${id}/claim`, opts), {
+        method: "POST",
+      });
       return { status: res.status, body: await jsonResponse(res) };
     },
-    patchIssue: async (id: string, body: Record<string, unknown>) => {
-      const res = await doFetch(`/api/issues/${id}`, {
+    patchIssue: async (
+      id: string,
+      body: Record<string, unknown>,
+      opts?: CallOpts,
+    ) => {
+      const res = await doFetch(withProject(`/api/issues/${id}`, opts), {
         method: "PATCH",
         body: JSON.stringify(body),
       });
       return { status: res.status, body: await jsonResponse(res) };
     },
-    deleteIssue: async (id: string) => {
-      const res = await doFetch(`/api/issues/${id}`, { method: "DELETE" });
+    deleteIssue: async (id: string, opts?: CallOpts) => {
+      const res = await doFetch(withProject(`/api/issues/${id}`, opts), {
+        method: "DELETE",
+      });
       return { status: res.status };
     },
-    setLabels: async (id: string, labelNames: string[]) => {
-      const res = await doFetch(`/api/issues/${id}/labels`, {
+    setLabels: async (id: string, labelNames: string[], opts?: CallOpts) => {
+      const res = await doFetch(withProject(`/api/issues/${id}/labels`, opts), {
         method: "PUT",
         body: JSON.stringify({ labelNames }),
       });
@@ -177,43 +237,72 @@ export function createHarness(): Harness {
       const res = await doFetch(`/api/labels/${id}`, { method: "DELETE" });
       return { status: res.status };
     },
-    addBlocker: async (id: string, blockerId: string | number) => {
-      const res = await doFetch(`/api/issues/${id}/blockers`, {
+    addBlocker: async (
+      id: string,
+      blockerId: string | number,
+      opts?: CallOpts,
+    ) => {
+      const res = await doFetch(withProject(`/api/issues/${id}/blockers`, opts), {
         method: "POST",
         body: JSON.stringify({ blockerId }),
       });
       return { status: res.status, body: await jsonResponse(res) };
     },
-    removeBlocker: async (id: string, blockerId: string) => {
-      const res = await doFetch(`/api/issues/${id}/blockers/${blockerId}`, {
-        method: "DELETE",
-      });
+    removeBlocker: async (id: string, blockerId: string, opts?: CallOpts) => {
+      const res = await doFetch(
+        withProject(`/api/issues/${id}/blockers/${blockerId}`, opts),
+        { method: "DELETE" },
+      );
       return { status: res.status };
     },
-    getBlockers: async (id: string) => {
-      const res = await doFetch(`/api/issues/${id}/blockers`);
+    getBlockers: async (id: string, opts?: CallOpts) => {
+      const res = await doFetch(withProject(`/api/issues/${id}/blockers`, opts));
       return { status: res.status, body: await jsonResponse(res) };
     },
-    addQuestion: async (id: string, question: string) => {
-      const res = await doFetch(`/api/issues/${id}/questions`, {
-        method: "POST",
-        body: JSON.stringify({ question }),
-      });
+    addQuestion: async (id: string, question: string, opts?: CallOpts) => {
+      const res = await doFetch(
+        withProject(`/api/issues/${id}/questions`, opts),
+        {
+          method: "POST",
+          body: JSON.stringify({ question }),
+        },
+      );
       return { status: res.status, body: await jsonResponse(res) };
     },
-    getQuestions: async (id: string) => {
-      const res = await doFetch(`/api/issues/${id}/questions`);
+    getQuestions: async (id: string, opts?: CallOpts) => {
+      const res = await doFetch(
+        withProject(`/api/issues/${id}/questions`, opts),
+      );
       return { status: res.status, body: await jsonResponse(res) };
     },
-    respond: async (id: string, number: number, answer: string) => {
-      const res = await doFetch(`/api/issues/${id}/questions/${number}/respond`, {
-        method: "POST",
-        body: JSON.stringify({ answer }),
-      });
+    respond: async (
+      id: string,
+      number: number,
+      answer: string,
+      opts?: CallOpts,
+    ) => {
+      const res = await doFetch(
+        withProject(`/api/issues/${id}/questions/${number}/respond`, opts),
+        {
+          method: "POST",
+          body: JSON.stringify({ answer }),
+        },
+      );
       return { status: res.status, body: await jsonResponse(res) };
     },
     openQuestions: async (qs = "") => {
       const res = await doFetch(`/api/questions${qs}`);
+      return { status: res.status, body: await jsonResponse(res) };
+    },
+    listProjects: async () => {
+      const res = await doFetch("/api/projects");
+      return { status: res.status, body: await jsonResponse(res) };
+    },
+    createProject: async (body: Record<string, unknown>) => {
+      const res = await doFetch("/api/projects", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
       return { status: res.status, body: await jsonResponse(res) };
     },
   };
@@ -233,7 +322,8 @@ export function createHarness(): Harness {
           TRACKER_DB_PATH: dbPath,
           // Disable seeding by default so each file starts truly empty and
           // opts into labels explicitly. Tests that want seed data can create
-          // labels via the API.
+          // labels via the API. A default project is still created (its key
+          // comes from TRACKER_PREFIX, default "LIN").
           TRACKER_SEED: "false",
         },
         stdio: ["ignore", "pipe", "pipe"],

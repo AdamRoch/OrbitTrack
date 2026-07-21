@@ -13,12 +13,22 @@ import { CometIcon } from "@/components/icons";
 /**
  * New-issue form. Uses React 19's useActionState with the createIssue server
  * action so we get inline error display without client-side validation logic.
+ *
+ * `projectKey` is the active project scope, carried through as a hidden field
+ * so the new issue lands in the right project and gets the right prefix.
  */
-export function NewIssueForm({ labels }: { labels: LabelDTO[] }) {
+export function NewIssueForm({
+  labels,
+  projectKey,
+}: {
+  labels: LabelDTO[];
+  projectKey: string;
+}) {
   const [state, formAction] = useActionState(createIssueAction, { ok: true });
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="projectKey" value={projectKey} />
       {state && !state.ok && state.error && (
         <div className="rounded-xl border border-[--danger]/50 bg-[--danger]/10 px-3 py-2 text-sm text-[--danger]">
           {state.error}

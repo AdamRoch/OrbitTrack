@@ -6,6 +6,7 @@ import {
   notFound,
   ok,
   parseJson,
+  requireProject,
   RouteContext,
 } from "@/lib/api";
 import { requireAnswerText } from "@/lib/validate";
@@ -14,17 +15,21 @@ import type { RespondToQuestionInput } from "@/lib/types";
 type Context = RouteContext<{ id: string; number: string }>;
 
 /**
- * POST /api/issues/:id/questions/:number/respond  { answer }
+ * POST /api/issues/:id/questions/:number/respond?project=KEY  { answer }
  * Answer a question by its per-issue number. Answering is a single, irreversible
  * event — a second respond against an already-answered question is a 409, not an
  * overwrite. A correction is a new question.
  *   - open question → 200 with the answered question
  *   - already answered → 409 already_answered
  *   - missing issue or question number → 404
+ *
+ * Resolution is project-scoped.
  */
 export async function POST(req: Request, ctx: Context) {
   try {
     const db = getDb();
+    const url = new URL(req.url);
+    const project = requireProject(db, url);
     const { id, number: numberParam } = await ctx.params;
     const number = Number(numberParam);
     if (!Number.isInteger(number) || number < 1) {
@@ -34,7 +39,7 @@ export async function POST(req: Request, ctx: Context) {
     const body = await parseJson<RespondToQuestionInput>(req);
     const answer = requireAnswerText(body.answer);
 
-    const result = respondToQuestion(db, id, number, answer);
+    const result = respondToQuestion(db, project, id, number, answer);
     if (!result.ok) {
       if (result.reason === "not_found") return notFound("question not found");
       return conflict(

@@ -6,6 +6,7 @@ import {
   notFound,
   ok,
   parseJson,
+  requireProject,
   RouteContext,
 } from "@/lib/api";
 import {
@@ -17,13 +18,18 @@ import {
 import type { UpdateIssueInput } from "@/lib/types";
 
 /**
- * GET /api/issues/:id  — `:id` may be the numeric id or the identifier (LIN-42).
+ * GET /api/issues/:id?project=KEY  — `:id` may be the numeric id or the
+ * identifier (e.g. LIN-42). Identifier-form lookups are scoped: the prefix
+ * must match the active project's key, so an identifier from another project
+ * returns 404 (no cross-project leakage).
  */
-export async function GET(_req: Request, ctx: RouteContext) {
+export async function GET(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
+    const url = new URL(req.url);
+    const project = requireProject(db, url);
     const { id } = await ctx.params;
-    const issue = getIssue(db, id);
+    const issue = getIssue(db, project, id);
     if (!issue) return notFound("issue not found");
     return ok(issue);
   } catch (err) {
@@ -32,15 +38,18 @@ export async function GET(_req: Request, ctx: RouteContext) {
 }
 
 /**
- * PATCH /api/issues/:id  — partial update of title/description/status/priority.
+ * PATCH /api/issues/:id?project=KEY  — partial update of
+ * title/description/status/priority. Resolution is project-scoped.
  */
 export async function PATCH(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
+    const url = new URL(req.url);
+    const project = requireProject(db, url);
     const { id } = await ctx.params;
     const body = await parseJson<UpdateIssueInput>(req);
 
-    const args: Parameters<typeof updateIssue>[2] = {};
+    const args: Parameters<typeof updateIssue>[3] = {};
     if (body.title !== undefined) args.title = requireTitle(body.title);
     if (body.description !== undefined) {
       args.description = optionalDescription(body.description);
@@ -52,7 +61,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       args.priority = parseOptionalPriority(body.priority);
     }
 
-    const updated = updateIssue(db, id, args);
+    const updated = updateIssue(db, project, id, args);
     if (!updated) return notFound("issue not found");
     return ok(updated);
   } catch (err) {
@@ -61,14 +70,17 @@ export async function PATCH(req: Request, ctx: RouteContext) {
 }
 
 /**
- * DELETE /api/issues/:id  — removes the issue and (via cascade) its label and
- * dependency rows. Returns 204, or 404 if it never existed.
+ * DELETE /api/issues/:id?project=KEY — removes the issue and (via cascade)
+ * its label and dependency rows. Returns 204, or 404 if it never existed or
+ * belongs to a different project. Resolution is project-scoped.
  */
-export async function DELETE(_req: Request, ctx: RouteContext) {
+export async function DELETE(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
+    const url = new URL(req.url);
+    const project = requireProject(db, url);
     const { id } = await ctx.params;
-    const deleted = deleteIssue(db, id);
+    const deleted = deleteIssue(db, project, id);
     if (!deleted) return notFound("issue not found");
     return noContent();
   } catch (err) {
