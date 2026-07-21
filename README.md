@@ -4,7 +4,9 @@
 
 A local, no-auth issue tracker for driving agentic development. Issues with
 status, priority, and labels plus a **dependency graph** and an **HTTP agent
-API**.
+API**. Multiple projects can be tracked side by side in one instance, each
+with its own identifier prefix and per-project number sequence (`LIN-42`,
+`OEMR-7`).
 
 The highest-value capability is the **advisor relationship**: a cheap, fast
 implementing agent works a ticket, and when it hits a decision it can't resolve
@@ -65,8 +67,12 @@ npm run dev
 ```
 
 Open http://localhost:3000. The database is created at `data/tracker.db` on
-first run and seeded with four default labels (`ready-for-agent`, `bug`,
-`feature`, `chore`).
+first run, seeded with four default labels (`ready-for-agent`, `bug`,
+`feature`, `chore`), and bootstrapped with a default project whose key comes
+from `TRACKER_PREFIX`. A pre-existing single-project database is migrated in
+place on next start: its issues are backfilled into the default project, and
+if it holds data, a timestamped snapshot file is written next to the DB
+first.
 
 ### One-time setup / reset
 
@@ -78,7 +84,7 @@ first run and seeded with four default labels (`ready-for-agent`, `bug`,
 | Var | Default | Purpose |
 |---|---|---|
 | `TRACKER_DB_PATH` | `data/tracker.db` | Location of the SQLite file. |
-| `TRACKER_PREFIX` | `LIN` | Issue identifier prefix (`LIN-42`). |
+| `TRACKER_PREFIX` | `LIN` | Key of the default project bootstrapped on first run (stored uppercased; a project's key is its identifier prefix). Further projects are created via the API with their own keys. |
 | `TRACKER_SEED` | `true` | Set to `false` to skip seeding default labels. |
 
 ---
@@ -119,30 +125,18 @@ identifier string (e.g. `LIN-42`). Errors use a stable envelope:
 { "error": { "message": "string", "code": "string | null" } }
 ```
 
-### Issues
+The tracker is **multi-project**: every `/api/issues/*` route takes an optional
+`?project=KEY` query param selecting the project scope (the default project
+when omitted), and `/api/projects` lists and creates projects. Identifier and
+numeric lookups are scoped to the active project — an identifier from another
+project is a `404`, never a leak.
 
-| Method | Path | Body | Success | Failure |
-|---|---|---|---|---|
-| `GET` | `/api/issues` | — | `200` `Issue[]`. Filters: `?status=`, `?priority=`, `?label=` (by name). | — |
-| `GET` | `/api/issues/frontier` | — | `200` `Issue[]`. | — |
-| `GET` | `/api/issues/:id` | — | `200` `Issue`. | `404` |
-| `POST` | `/api/issues` | `{ title, description?, status?, priority?, labelNames?[] }` | `201` `Issue`. | `400` |
-| `PATCH` | `/api/issues/:id` | partial of `{ title, description, status, priority }` | `200` `Issue`. | `400`, `404` |
-| `POST` | `/api/issues/:id/claim` | — | `200` `Issue` (status `in_progress`). Idempotent if already `in_progress`. | `409` if not `todo`/`in_progress`; `404` |
-| `DELETE` | `/api/issues/:id` | — | `204`. | `404` |
-| `PUT` | `/api/issues/:id/labels` | `{ labelNames: string[] }` (full replacement) | `200` `Issue`. | `400` unknown name; `404` |
-| `GET` | `/api/issues/:id/blockers` | — | `200` `Issue[]`. | `404` |
-| `POST` | `/api/issues/:id/blockers` | `{ blockerId: number\|string }` | `201` `{ blockerIssueId, blockedIssueId }`. | `400` self-edge/cycle; `404` |
-| `DELETE` | `/api/issues/:id/blockers/:blockerId` | — | `204`. | `404` |
-| `GET` | `/api/issues/:id/questions` | — | `200` `Question[]` (also embedded in `Issue.questions`). | `404` |
-| `POST` | `/api/issues/:id/questions` | `{ question }` | `201` `Question`. Requires `in_progress`. | `409 not_in_progress`; `400 empty`; `404` |
-| `POST` | `/api/issues/:id/questions/:number/respond` | `{ answer }` | `200` `Question`. | `409 already_answered`; `400 empty`; `404` |
+The full route-by-route reference (paths, bodies, status codes, project
+scoping) lives in [AGENTS.md](AGENTS.md), the agent-contract document loaded
+into every agent session. It is the single source of truth for the API
+surface; the tables are not duplicated here.
 
 ### Questions
-
-| Method | Path | Body | Success | Failure |
-|---|---|---|---|---|
-| `GET` | `/api/questions` | — | `200` `{ issue: Issue, ...Question }[]`. Filters: `?status=open` (default), `?label=` (a QA-agent "track"). | `400 invalid_status` |
 
 A **Question** is a clarification an implementing agent posts against an
 `in_progress` issue, answered by a separate orchestrating model. It lets an
@@ -165,11 +159,8 @@ agent loop stay autonomous instead of stalling on a harness prompt.
 
 ### Labels
 
-| Method | Path | Body | Success | Failure |
-|---|---|---|---|---|
-| `GET` | `/api/labels` | — | `200` `Label[]`. | — |
-| `POST` | `/api/labels` | `{ name, color? }` | `201` `Label`. | `400` empty/dup/bad color |
-| `DELETE` | `/api/labels/:id` | — | `204`. Removes from all issues. | `404` |
+Labels are **global across projects** — one triage vocabulary for the whole
+tracker. CRUD lives at `/api/labels` (see [AGENTS.md](AGENTS.md)).
 
 ### `claim` semantics
 
@@ -219,8 +210,11 @@ kept a DAG: self-edges and cycles are rejected at write time with `400`.
 
 ## UI
 
-- **`/`** — issue list with status/priority/label filters.
+- **`/`** — issue list with status/priority/label filters and a project
+  switcher; the list, frontier, and map pages are all scoped to the active
+  project.
 - **`/frontier`** — the frontier (what's grabbable right now).
+- **`/map`** — the active project's dependency graph.
 - **`/issues/:identifier`** — full detail: rendered markdown, edit form,
   status/priority/label controls, blocker + blocked-by lists with add/remove,
   and a read-only **Agent Q&A** transcript (open questions show as pending,
@@ -244,9 +238,11 @@ npm test          # run once
 npm run test:watch
 ```
 
-68 tests cover: frontier cases, cycle/self-edge prevention, claim transitions,
-identifier assignment (no reuse after delete), label cascade, CRUD, filtering,
-and the canonical error shape, plus a few UI smoke checks.
+The tests cover: frontier cases, cycle/self-edge prevention, claim
+transitions, identifier assignment (no reuse after delete), label cascade,
+CRUD, filtering, the canonical error shape, multi-project scoping (per-project
+numbering, no cross-project leakage), legacy single-project DB migration, plus
+a few UI smoke checks.
 
 ---
 
@@ -255,11 +251,11 @@ and the canonical error shape, plus a few UI smoke checks.
 ```
 src/
   lib/
-    db/            schema + SQLite connection (lazy create + seed)
-    domain.ts      the rules: frontier, cycle prevention, claim, CRUD
+    db/            schema + SQLite connection (lazy create + seed + legacy migration)
+    domain.ts      the rules: frontier, cycle prevention, claim, CRUD, projects
     serialize.ts   canonical Issue JSON shape
     validate.ts    API input parsing → ValidationError
-    identifiers.ts LIN-N assignment (persistent counter, never reused)
+    identifiers.ts project-scoped :id resolution + KEY-N identifier format
     api.ts         HTTP helpers + canonical error envelope
     markdown.ts    server-side remark rendering
   components/      UI primitives + shared issue display

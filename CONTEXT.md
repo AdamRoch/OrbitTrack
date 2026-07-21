@@ -7,6 +7,16 @@ question-and-answer channel that lets an implementing agent ask a human
 
 ## Language
 
+**Project**:
+The top-level partition of work — several can be tracked side by side in one
+instance. Each Project owns a unique alphabetic `key` that doubles as its
+identifier prefix, plus its own issue number sequence, so `LIN-1` and
+`OEMR-1` coexist. Every Issue belongs to exactly one Project, and resolution
+by identifier or id is project-scoped (no cross-project leakage). Labels are
+global, not per-project.
+_Avoid_: Workspace, team (those imply people/tenancy; a Project only scopes
+tickets)
+
 **Issue**:
 The unit of work an agent picks up, works, and reports done. The code and
 API use "Issue" throughout; "ticket" is the preferred natural-language word

@@ -3,8 +3,8 @@ name: advise
 description: >
   Act as the advisor for OrbitTrack tickets. Polls open questions from the tracker,
   reads each with its full embedded issue context, and posts answers through the Q&A
-  API. Optionally scoped to a single track (label) or, once projects exist, a project.
-  With no scope, advises on everything. The advisor is the counterpart to
+  API. Optionally scoped to a single track (label).
+  With no scope, advises on everything across all projects. The advisor is the counterpart to
   /work-with-help: the implementing agent asks, you answer.
 argument-hint: "[track]  (label name; empty = advise on all open questions)"
 disable-model-invocation: true
@@ -26,11 +26,13 @@ anything done. You read, decide, and respond.
 The argument sets your track (a label that groups a sequence of related tickets):
 
 - **Track-scoped** — `/advise auth`. Poll only questions on issues labeled `auth`.
-- **All** — `/advise` (no arg). Poll every open question.
+- **All** — `/advise` (no arg). Poll every open question, across all projects
+  (`GET /api/questions` without `?project=` is the cross-project view; add
+  `?project=KEY` to narrow to one project).
 
-Once projects exist, bare `/advise` will default to the current project's questions,
-and `--project X` / `--all` will be added. For now, there is one implicit project,
-so "all" means everything.
+A `--project X` argument (with bare `/advise` defaulting to the current
+project's questions) is still future work; for now bare `/advise` means
+everything.
 
 ## The loop
 

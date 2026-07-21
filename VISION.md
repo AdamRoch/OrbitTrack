@@ -81,13 +81,14 @@ yet; this doc records that it is where things are going.
 
 ### Projects and advisor scope
 
-The next realistic step is **projects**: a first-class partition so that
-multiple bodies of work can be tracked simultaneously without every ticket
-sharing one flat dashboard. An issue belongs to exactly one project. The
-frontier, the issue list, and the Q&A channel all scope to a project.
+Projects have **shipped** in a lean, view-only form: a first-class partition
+so that multiple bodies of work can be tracked simultaneously without every
+ticket sharing one flat dashboard. An issue belongs to exactly one project.
+The frontier, the issue list, and the Q&A channel all scope to a project
+(`?project=KEY` on the API; a switcher in the UI).
 
-The immediate payoff is the **advisor scope hierarchy**, which has no clean
-nesting until projects exist:
+The payoff still being collected is the **advisor scope hierarchy**, which
+had no clean nesting until projects existed:
 
 ```
 Global advisor    → all open questions, across all projects
@@ -95,25 +96,24 @@ Project advisor   → one project's open questions        (the default for /advi
 Track advisor     → one label within one project         (/advise --track auth)
 ```
 
-Today, with no projects, the whole tracker is one implicit project and the
-only meaningful advisor scope is the track. Once projects exist, bare
-`/advise` defaults to the current project context (the common case: advise
-on the work in front of you), and global is an explicit opt-in. The API
-change is purely additive — `GET /api/questions` gains a `?project=`
-filter alongside the existing `?label=`; no existing caller breaks.
+The API side is in place: `GET /api/questions` takes a `?project=` filter
+alongside the existing `?label=` — purely additive, no existing caller broke —
+and omitting it is the global cross-project view. The skill side is still to
+come: bare `/advise` today means "all open questions"; defaulting it to the
+current project context (the common case: advise on the work in front of
+you), with global as an explicit opt-in, remains future work.
 
 ### Identifier scheme under projects
 
-Today the prefix (`LIN`) is a single global env var and `LIN-42` is unique
-because there is only one prefix. Under projects the direction is
-**per-project prefixes**: each project owns its alphabetic prefix (`AUTH-42`,
-`UI-13`) and its number sequence. Identifiers become self-documenting (you
-can tell which project a ticket belongs to from the ticket itself), and the
-migration is back-fill into a default project that inherits the existing
-prefix and number counter. This is the Linear model and the frame of
-reference the tracker started from.
+Shipped as designed: **per-project prefixes** — each project owns its
+alphabetic prefix (its `key`: `AUTH-42`, `UI-13`) and its own number
+sequence. Identifiers are self-documenting (you can tell which project a
+ticket belongs to from the ticket itself), and the migration back-fills a
+legacy single-project DB into a default project that inherits the existing
+prefix (`TRACKER_PREFIX`) and number counter. This is the Linear model and
+the frame of reference the tracker started from.
 
-The rejected alternative is keeping a single global identifier with a
+The rejected alternative was keeping a single global identifier with a
 `project_id` filter. Simpler to migrate, but the `LIN` prefix becomes
 meaningless when several projects all share it, and identifiers stop
 self-describing.
@@ -275,11 +275,11 @@ experimentation, not by deciding in advance.
   degrades to layering on top of the harness's plan mode rather than assuming
   it owns that slot. Whether full replacement is possible needs empirical
   testing with a real ticket in a real harness.
-- **Project routing for agents.** Once projects exist, how does an agent know
-  which project it's working in? Options: the skill takes a `--project` arg,
-  AGENTS.md names the active project, or a `TRACKER_PROJECT` env var sets it.
-  The API needs `?project=` on frontier/questions regardless; this is about
-  how the agent picks up the context.
+- **Project routing for agents.** Projects exist and the API takes
+  `?project=` on frontier/questions, but how does an agent know which project
+  it's working in? Options: the skill takes a `--project` arg, AGENTS.md
+  names the active project, or a `TRACKER_PROJECT` env var sets it. This is
+  about how the agent picks up the context.
 - **Role-aware claiming.** Today `claim` is binary (todo → in_progress). If
   we want explicit implementor/advisor roles, does claim gain a role
   parameter? Or do labels carry that? Open until the role concept proves
