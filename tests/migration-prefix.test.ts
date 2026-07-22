@@ -131,21 +131,24 @@ describe("legacy migration keys default project off issue prefix, not TRACKER_PR
     }
   });
 
-  it("lowercase legacy prefix is preserved verbatim and stays resolvable", () => {
+  it("lowercase legacy prefix is uppercased at migration and stays reachable", () => {
     // Legacy configs never uppercased TRACKER_PREFIX, so lowercase identifiers
-    // like `lin-1` are valid legacy data. The derived key must match their
-    // stored casing for resolveIssue's case-sensitive row lookup to hit.
+    // like `lin-1` are valid legacy data. The migration uppercases both the
+    // derived key and the copied identifiers, so migrated tickets resolve by
+    // the uppercase identifier (and by the old lowercase form, since
+    // resolveIssue's prefix gate is case-insensitive).
     const lower = LEGACY_PREFIX.toLowerCase();
     seedLegacyDb(dbPath, lower);
     const { db, raw } = createDb(dbPath);
     try {
       const project = getDefaultProject(db)!;
-      expect(project.key).toBe(lower);
+      expect(project.key).toBe(LEGACY_PREFIX);
       for (const number of [1, 2, 3]) {
-        const found = resolveIssue(db, project, `${lower}-${number}`);
-        expect(found, `${lower}-${number} should resolve`).not.toBeNull();
-        expect(found!.identifier).toBe(`${lower}-${number}`);
+        const found = resolveIssue(db, project, `${LEGACY_PREFIX}-${number}`);
+        expect(found, `${LEGACY_PREFIX}-${number} should resolve`).not.toBeNull();
+        expect(found!.identifier).toBe(`${LEGACY_PREFIX}-${number}`);
       }
+      expect(resolveIssue(db, project, `${lower}-1`)).not.toBeNull();
     } finally {
       raw.close();
     }
