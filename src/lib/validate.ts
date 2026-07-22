@@ -140,3 +140,33 @@ export function parseLabelName(value: unknown): string {
   }
   return trimmed;
 }
+
+/**
+ * A project key — the identifier prefix. Rules:
+ *   - 1–10 chars (keeps identifiers compact: `LIN-42`, `OEMR-9`).
+ *   - ASCII letters only (no digits/symbols) so it can't collide with the
+ *     numeric part of an identifier and survives `^([A-Za-z]+)-(\d+)$`.
+ *   - Stored uppercased; the returned value is normalized.
+ *
+ * Length and alphabet are enforced here so the resolver's regex match stays a
+ * reliable discriminator between identifier-form and numeric-form input.
+ */
+const PROJECT_KEY_RE = /^[A-Za-z]{1,10}$/;
+export function parseProjectKey(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new ValidationError("key must be a string", "invalid_type");
+  }
+  const trimmed = value.trim();
+  if (!PROJECT_KEY_RE.test(trimmed)) {
+    throw new ValidationError(
+      "key must be 1–10 ASCII letters (A–Z, a–z)",
+      "invalid_key",
+    );
+  }
+  return trimmed.toUpperCase();
+}
+
+/** A project display name — non-empty trimmed string. */
+export function parseProjectName(value: unknown): string {
+  return requireTitle(value, "name");
+}

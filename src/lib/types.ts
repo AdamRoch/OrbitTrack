@@ -12,6 +12,21 @@ export interface LabelDTO {
 }
 
 /**
+ * A project — the top-level scope for issues. The `key` IS the identifier
+ * prefix (e.g. "LIN" → `LIN-42`). `nextNumber` is the per-project high-water
+ * counter — the number most recently assigned; the next issue receives
+ * `nextNumber + 1`. The first project by id is the default scope for API
+ * requests that don't pass `?project=KEY`.
+ */
+export interface ProjectDTO {
+  id: number;
+  key: string;
+  name: string;
+  nextNumber: number;
+  createdAt: string; // ISO-8601
+}
+
+/**
  * A question an implementing agent posted against an issue, plus (optionally)
  * the orchestrating model's answer. `status` is derived from `answeredAt`:
  * null ⇒ open (asked, awaiting an answer); non-null ⇒ answered. `number` is a
@@ -90,4 +105,10 @@ export interface CreateQuestionInput {
 /** Input shape for POST /api/issues/:id/questions/:number/respond. */
 export interface RespondToQuestionInput {
   answer: unknown;
+}
+
+/** Input shape for POST /api/projects. */
+export interface CreateProjectInput {
+  key: unknown;
+  name?: unknown;
 }

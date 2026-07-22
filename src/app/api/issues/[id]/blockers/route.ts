@@ -1,19 +1,29 @@
 import { getDb } from "@/lib/db";
 import { addBlocker, getBlockers } from "@/lib/domain";
-import { badRequest, handleError, notFound, ok, parseJson, RouteContext } from "@/lib/api";
+import {
+  badRequest,
+  handleError,
+  notFound,
+  ok,
+  parseJson,
+  requireProject,
+  RouteContext,
+} from "@/lib/api";
 
 interface AddBlockerBody {
   blockerId?: unknown;
 }
 
 /**
- * GET /api/issues/:id/blockers — the issues that block this one.
+ * GET /api/issues/:id/blockers?project=KEY — the issues that block this one.
  */
-export async function GET(_req: Request, ctx: RouteContext) {
+export async function GET(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
+    const url = new URL(req.url);
+    const project = requireProject(db, url);
     const { id } = await ctx.params;
-    const blockers = getBlockers(db, id);
+    const blockers = getBlockers(db, project, id);
     if (blockers === null) return notFound("issue not found");
     return ok(blockers);
   } catch (err) {
@@ -22,13 +32,17 @@ export async function GET(_req: Request, ctx: RouteContext) {
 }
 
 /**
- * POST /api/issues/:id/blockers  { blockerId: number|string }
- * Add an edge: `blockerId` blocks `:id`. Rejects self-edges and cycles (400),
- * or if either issue is missing (404).
+ * POST /api/issues/:id/blockers?project=KEY  { blockerId: number|string }
+ *   Add an edge: `blockerId` blocks `:id`. Both endpoints must live in the
+ *   active project scope (cross-project dependencies are out of scope for the
+ *   lean view-only model). Rejects self-edges and cycles (400), or if either
+ *   issue is missing (404).
  */
 export async function POST(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
+    const url = new URL(req.url);
+    const project = requireProject(db, url);
     const { id } = await ctx.params;
     const body = await parseJson<AddBlockerBody>(req);
 
@@ -37,7 +51,7 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
     const blockerId = body.blockerId;
 
-    const result = addBlocker(db, id, blockerId as string | number);
+    const result = addBlocker(db, project, id, blockerId as string | number);
     if (result === null) return notFound("issue not found");
 
     // The contract says 201 on creation; we return the edge object either way

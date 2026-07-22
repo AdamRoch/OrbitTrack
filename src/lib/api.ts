@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import type { DB } from "./db";
+import { getDefaultProject, getProjectByKey } from "./db";
+import type { ProjectRow } from "./db/schema";
 import type { ApiErrorBody } from "./types";
 import { ValidationError } from "./validate";
 
@@ -75,4 +78,33 @@ export interface RouteContext<
   T extends Record<string, string> = { id: string },
 > {
   params: Promise<T>;
+}
+
+/**
+ * Resolve the active project for a request. Reads `?project=KEY` from the URL:
+ *   - absent or empty → the default project (first by id) — backward-compatible
+ *     with the single-project API every existing agent uses.
+ *   - present but doesn't match a project → throws ValidationError → 400.
+ *
+ * Every `/api/issues/*` route passes its Request through this so the scope is
+ * applied uniformly. The resolver then gates identifier-form lookups against
+ * `project.key` to prevent cross-project leakage.
+ */
+export function requireProject(db: DB, url: URL): ProjectRow {
+  const key = url.searchParams.get("project");
+  if (key === null || key.trim().length === 0) {
+    const def = getDefaultProject(db);
+    if (!def) {
+      throw new ValidationError("no projects exist", "no_projects");
+    }
+    return def;
+  }
+  const found = getProjectByKey(db, key);
+  if (!found) {
+    throw new ValidationError(
+      `project "${key}" not found`,
+      "project_not_found",
+    );
+  }
+  return found;
 }

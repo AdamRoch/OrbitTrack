@@ -1,77 +1,82 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { DB } from "./db";
 import * as s from "./db/schema";
-import { PROJECT_PREFIX } from "./config";
 
 /**
  * Resolve a route `:id` param — which the contract says may be either the
- * numeric `id` or the `identifier` string (e.g. `LIN-42`) — to the issue row.
- * Returns `null` when not found. Prefix matching is case-insensitive on the
- * alphabetic part so `lin-42` works too.
+ * numeric surrogate `id` or the `identifier` string (e.g. `LIN-42`) — to the
+ * issue row, scoped to a specific project. Returns `null` when not found OR
+ * when the identifier's prefix doesn't match the project's key (preventing
+ * cross-project leakage by identifier).
+ *
+ * `project` is the active scope. Identifier-form lookups require the prefix to
+ * match `project.key` (case-insensitively); numeric lookups require the row to
+ * belong to `project.id`. This is the load-bearing "no cross-project leakage"
+ * gate: an attacker who knows another project's identifier can't read or
+ * mutate it through this project's scope.
  */
 export function resolveIssue(
   db: DB,
+  project: s.ProjectRow,
   idOrIdentifier: string | number,
 ): s.IssueRow | null {
-  // Numeric form: pure integer → match on id.
+  // Numeric form: pure integer → match on id, scoped to the project.
   if (typeof idOrIdentifier === "number") {
     return (
-      db.select().from(s.issues).where(eq(s.issues.id, idOrIdentifier)).get() ??
-      null
+      db
+        .select()
+        .from(s.issues)
+        .where(
+          and(eq(s.issues.id, idOrIdentifier), eq(s.issues.projectId, project.id)),
+        )
+        .get() ?? null
     );
   }
 
   const str = String(idOrIdentifier).trim();
 
-  // Pure number string → id.
+  // Pure number string → surrogate id, scoped to the project.
   if (/^\d+$/.test(str)) {
     const n = Number(str);
-    return db.select().from(s.issues).where(eq(s.issues.id, n)).get() ?? null;
+    return (
+      db
+        .select()
+        .from(s.issues)
+        .where(and(eq(s.issues.id, n), eq(s.issues.projectId, project.id)))
+        .get() ?? null
+    );
   }
 
-  // Identifier form: PREFIX-NUMBER. Case-insensitive on the prefix.
+  // Identifier form: PREFIX-NUMBER. The prefix MUST match the project's key
+  // (case-insensitive on the alphabetic part). A mismatch is treated as
+  // not-found rather than leaked: `LIN-42` requested against project `OEMR`
+  // returns null even if `LIN-42` exists in another project.
   const match = str.match(/^([A-Za-z]+)-(\d+)$/);
   if (match) {
     const [, prefix, num] = match;
-    if (prefix.toUpperCase() === PROJECT_PREFIX.toUpperCase()) {
-      const exact = `${PROJECT_PREFIX}-${num}`;
-      return (
-        db.select().from(s.issues).where(eq(s.issues.identifier, exact)).get() ??
-        null
-      );
-    }
-    return null;
+    if (prefix.toUpperCase() !== project.key.toUpperCase()) return null;
+    const exact = `${project.key}-${num}`;
+    return (
+      db
+        .select()
+        .from(s.issues)
+        .where(
+          and(
+            eq(s.issues.identifier, exact),
+            eq(s.issues.projectId, project.id),
+          ),
+        )
+        .get() ?? null
+    );
   }
 
   return null;
 }
 
 /**
- * Atomically reserve and return the next project-wide issue number. Uses a
- * persistent high-water counter (meta.issue_number_seq) so numbers are NEVER
- * reused, even after the highest-numbered issue is deleted.
- *
- * Runs inside the caller's transaction so concurrent creates serialize on the
- * counter row. Uses UPDATE … RETURNING via Drizzle's `.values()`-free raw SQL
- * to keep it a single statement; better-sqlite3 supports RETURNING.
+ * Build the identifier string for an issue in a given project. The project key
+ * IS the identifier prefix.
  */
-export function nextIssueNumber(db: DB): number {
-  const row = db
-    .get<{ value: number }>(
-      sql`UPDATE meta SET value = value + 1 WHERE key = 'issue_number_seq' RETURNING value`,
-    );
-  if (row && typeof row.value === "number") return row.value;
-
-  // Defensive: the row is created in ensureSchema, but guard regardless.
-  db.run(
-    sql`INSERT OR IGNORE INTO meta (key, value) VALUES ('issue_number_seq', 0)`,
-  );
-  const next = db.get<{ value: number }>(
-    sql`UPDATE meta SET value = value + 1 WHERE key = 'issue_number_seq' RETURNING value`,
-  );
-  return next!.value;
-}
-
-export function identifierFor(number: number): string {
-  return `${PROJECT_PREFIX}-${number}`;
+export function identifierFor(projectKey: string, number: number): string {
+  return `${projectKey}-${number}`;
 }

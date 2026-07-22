@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getIssue, getBlockers, getBlockedBy, listLabels } from "@/lib/domain";
-import { getServerDb } from "@/lib/server-data";
+import { getServerDb, getServerProject } from "@/lib/server-data";
 import { renderMarkdown } from "@/lib/markdown";
 import {
   BlockedBadge,
@@ -18,33 +18,47 @@ import { QATranscript } from "@/components/qa-transcript";
  * Detail view (/issues/:identifier). Full title, rendered markdown, status &
  * priority controls, label chips, and the blocker / blocked-by lists with
  * add/remove controls. All mutations go through server actions.
+ *
+ * Project scope: reads `?project=KEY` to set the active scope. The identifier's
+ * prefix must match the active project's key — a request scoped to project
+ * `LIN` that asks for `OEMR-1` is "not found" (no cross-project leakage).
  */
 export default async function IssueDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ identifier: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { identifier } = await params;
+  const [{ identifier }, sp] = await Promise.all([params, searchParams]);
   const db = getServerDb();
 
-  const issue = getIssue(db, identifier);
+  const projectKey =
+    typeof sp.project === "string" ? sp.project : undefined;
+  const project = getServerProject(db, projectKey);
+  if (!project) notFound();
+
+  const issue = getIssue(db, project, identifier);
   if (!issue) notFound();
 
   const [blockers, blockedBy, allLabels, descriptionHtml] = await Promise.all([
-    getBlockers(db, identifier) ?? [],
-    getBlockedBy(db, identifier) ?? [],
+    getBlockers(db, project, identifier) ?? [],
+    getBlockedBy(db, project, identifier) ?? [],
     Promise.resolve(listLabels(db)),
     renderMarkdown(issue.description),
   ]);
 
+  // The back-link carries the project context.
+  const backHref = `/?project=${project.key}`;
+
   return (
     <div className="max-w-3xl">
       <Link
-        href="/"
+        href={backHref}
         className="inline-flex items-center gap-1 text-xs text-[--foreground-muted] hover:text-[--foreground] mb-4 transition-colors"
       >
         <span className="rotate-180">→</span>
-        Back to issues
+        Back to {project.key} issues
       </Link>
 
       <Reveal>
@@ -96,6 +110,7 @@ export default async function IssueDetailPage({
               allLabels={allLabels}
               blockers={blockers}
               blockedBy={blockedBy}
+              projectKey={project.key}
             />
           </Reveal>
         </div>
@@ -156,7 +171,7 @@ function DependencyList({
           {issues.map((i) => (
             <li key={i.id}>
               <Link
-                href={`/issues/${i.identifier}`}
+                href={`/issues/${i.identifier}?project=${i.identifier.split("-")[0]}`}
                 className="group flex items-center gap-2 rounded-xl border border-[--border] bg-[--surface]/60 px-3 py-2 text-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_55%,transparent)] hover:bg-[--surface-hover]/80 hover:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_35%,transparent),0_0_20px_-6px_rgba(var(--glow),0.6)]"
               >
                 <span className="font-mono text-xs text-[--foreground-subtle]">

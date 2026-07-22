@@ -1,11 +1,24 @@
-import { and, desc, asc, eq, inArray, ne, sql, isNull } from "drizzle-orm";
+import {
+  and,
+  desc,
+  asc,
+  eq,
+  inArray,
+  ne,
+  sql,
+  isNull,
+} from "drizzle-orm";
 import type { DB } from "./db";
+import {
+  nextIssueNumber,
+  getProjectByKey,
+} from "./db";
 import * as s from "./db/schema";
-import type { IssueStatus, Priority, LabelRow } from "./db/schema";
+import type { IssueStatus, Priority, LabelRow, ProjectRow } from "./db/schema";
 import { toIssueDTO, toIssueDTOs } from "./serialize";
-import type { IssueDTO, LabelDTO, QuestionDTO } from "./types";
+import type { IssueDTO, LabelDTO, ProjectDTO, QuestionDTO } from "./types";
 import { ValidationError } from "./validate";
-import { identifierFor, nextIssueNumber, resolveIssue } from "./identifiers";
+import { identifierFor, resolveIssue } from "./identifiers";
 import { SYSTEM_LABEL_NAME } from "./config";
 
 /** Case-insensitive check for the derived "Ready for Agent" label name. */
@@ -16,12 +29,70 @@ function isSystemLabel(name: string): boolean {
 /**
  * The domain layer. Every operation the UI and API need goes through here so
  * the rules (frontier, cycle prevention, claim semantics, identifier
- * assignment, label cascade) live in exactly one place.
+ * assignment, label cascade, project scope) live in exactly one place.
  *
  * better-sqlite3 is a synchronous driver, so every function here is sync —
  * which lets us safely run multi-statement work inside `db.transaction()`.
  * All functions take an explicit `db` so tests can pass a per-test database.
+ *
+ * Most functions also take an explicit `project: ProjectRow` — the active
+ * scope. Identifier resolution is gated against `project.key` so a request
+ * scoped to one project cannot read or mutate another project's ticket by
+ * guessing its identifier (the "no cross-project leakage" rule).
  */
+
+// ----------------------------------------------------------------------------
+// Projects
+// ----------------------------------------------------------------------------
+
+export interface CreateProjectArgs {
+  key: string; // already validated + uppercased by the caller
+  name: string;
+}
+
+/**
+ * Create a project. The key is the identifier prefix; it is unique (enforced
+ * by the schema). Throws ValidationError on a duplicate key or name. The
+ * caller is responsible for normalizing the key (uppercase, validate) via
+ * `parseProjectKey` before calling.
+ */
+export function createProject(db: DB, args: CreateProjectArgs): ProjectDTO {
+  const existing = getProjectByKey(db, args.key);
+  if (existing) {
+    throw new ValidationError(
+      `project key "${args.key}" already exists`,
+      "duplicate_key",
+    );
+  }
+  const now = Date.now();
+  const row = db
+    .insert(s.projects)
+    .values({
+      key: args.key,
+      name: args.name,
+      nextNumber: 0,
+      createdAt: now,
+    })
+    .returning()
+    .get();
+  return toProjectDTO(row);
+}
+
+/** List all projects, ordered by id (default project first). */
+export function listProjects(db: DB): ProjectDTO[] {
+  const rows = db.select().from(s.projects).orderBy(asc(s.projects.id)).all();
+  return rows.map(toProjectDTO);
+}
+
+function toProjectDTO(row: s.ProjectRow): ProjectDTO {
+  return {
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    nextNumber: row.nextNumber,
+    createdAt: new Date(row.createdAt).toISOString(),
+  };
+}
 
 // ----------------------------------------------------------------------------
 // Issues — reads
@@ -35,9 +106,16 @@ export interface ListFilters {
 
 const DEFAULT_ORDER = [desc(s.issues.priority), desc(s.issues.createdAt)];
 
-/** List issues with optional filters. Default order: priority desc, created desc. */
-export function listIssues(db: DB, filters: ListFilters = {}): IssueDTO[] {
-  const conds = [];
+/**
+ * List issues scoped to a project with optional filters.
+ * Default order: priority desc, created desc.
+ */
+export function listIssues(
+  db: DB,
+  project: ProjectRow,
+  filters: ListFilters = {},
+): IssueDTO[] {
+  const conds = [eq(s.issues.projectId, project.id)];
   if (filters.status) conds.push(eq(s.issues.status, filters.status));
   if (filters.priority !== undefined)
     conds.push(eq(s.issues.priority, filters.priority));
@@ -49,13 +127,15 @@ export function listIssues(db: DB, filters: ListFilters = {}): IssueDTO[] {
     rows = db
       .select()
       .from(s.issues)
-      .where(and(eq(s.issues.status, "todo"), ...conds))
+      .where(and(...conds))
       .orderBy(...DEFAULT_ORDER)
       .all();
-    rows = rows.filter((r) => isOnFrontier(db, r.id));
+    rows = rows.filter(
+      (r) => r.status === "todo" && isOnFrontier(db, r.id),
+    );
   } else if (filters.label) {
     // Find issue ids that carry a label by this name, then intersect with
-    // any status/priority conditions.
+    // status/priority conditions. Labels are global across projects.
     const matched = db
       .select({ issueId: s.issueLabels.issueId })
       .from(s.issueLabels)
@@ -70,26 +150,29 @@ export function listIssues(db: DB, filters: ListFilters = {}): IssueDTO[] {
       .where(and(inArray(s.issues.id, ids), ...conds))
       .orderBy(...DEFAULT_ORDER)
       .all();
-  } else if (conds.length > 0) {
+  } else {
     rows = db
       .select()
       .from(s.issues)
       .where(and(...conds))
       .orderBy(...DEFAULT_ORDER)
       .all();
-  } else {
-    rows = db.select().from(s.issues).orderBy(...DEFAULT_ORDER).all();
   }
 
   return toIssueDTOs(db, rows);
 }
 
-/** Get a single issue by id or identifier. Returns null if not found. */
+/**
+ * Get a single issue by id or identifier within a project scope. Returns null
+ * if not found, including when the identifier's prefix doesn't match the
+ * project's key (preventing cross-project leakage).
+ */
 export function getIssue(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
 ): IssueDTO | null {
-  const row = resolveIssue(db, idOrIdentifier);
+  const row = resolveIssue(db, project, idOrIdentifier);
   if (!row) return null;
   return toIssueDTO(db, row);
 }
@@ -99,7 +182,8 @@ export function getIssue(
 // ----------------------------------------------------------------------------
 
 /**
- * The frontier: issues that are `todo` AND whose every blocker is `done`.
+ * The frontier for a project: issues that are `todo` AND whose every blocker
+ * is `done`.
  *
  * Semantics (load-bearing):
  *  - `todo` status is required. `backlog` is never on the frontier.
@@ -113,11 +197,13 @@ export function getIssue(
  * non-`done` issue, then subtract from all `todo` issues. Cheaper than
  * per-issue traversal and reads cleanly in SQL.
  */
-export function getFrontier(db: DB): IssueDTO[] {
+export function getFrontier(db: DB, project: ProjectRow): IssueDTO[] {
   const todoIssues = db
     .select()
     .from(s.issues)
-    .where(eq(s.issues.status, "todo"))
+    .where(
+      and(eq(s.issues.status, "todo"), eq(s.issues.projectId, project.id)),
+    )
     .all();
 
   if (todoIssues.length === 0) return [];
@@ -177,12 +263,19 @@ export interface CreateIssueArgs {
   labelNames?: string[];
 }
 
-/** Create an issue, assigning the next project-wide number atomically. */
-export function createIssue(db: DB, args: CreateIssueArgs): IssueDTO {
+/**
+ * Create an issue in a project, assigning the next per-project number
+ * atomically. The identifier is `${project.key}-${number}`.
+ */
+export function createIssue(
+  db: DB,
+  project: ProjectRow,
+  args: CreateIssueArgs,
+): IssueDTO {
   return db.transaction((tx) => {
     const now = Date.now();
-    const number = nextIssueNumber(tx);
-    const identifier = identifierFor(number);
+    const number = nextIssueNumber(tx, project.id);
+    const identifier = identifierFor(project.key, number);
     const status: IssueStatus = args.status ?? "backlog";
     const priority: Priority = args.priority ?? 0;
 
@@ -191,6 +284,7 @@ export function createIssue(db: DB, args: CreateIssueArgs): IssueDTO {
       .values({
         number,
         identifier,
+        projectId: project.id,
         title: args.title,
         description: args.description,
         status,
@@ -233,10 +327,11 @@ export interface UpdateIssueArgs {
 /** Patch an issue. Only provided fields are touched; updatedAt bumps. */
 export function updateIssue(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
   args: UpdateIssueArgs,
 ): IssueDTO | null {
-  const existing = resolveIssue(db, idOrIdentifier);
+  const existing = resolveIssue(db, project, idOrIdentifier);
   if (!existing) return null;
 
   const patch: Partial<s.IssueRow> = { updatedAt: Date.now() };
@@ -246,16 +341,21 @@ export function updateIssue(
   if (args.priority !== undefined) patch.priority = args.priority;
 
   db.update(s.issues).set(patch).where(eq(s.issues.id, existing.id)).run();
-  const updated = db.select().from(s.issues).where(eq(s.issues.id, existing.id)).get()!;
+  const updated = db
+    .select()
+    .from(s.issues)
+    .where(eq(s.issues.id, existing.id))
+    .get()!;
   return toIssueDTO(db, updated);
 }
 
 /** Delete an issue; cascade removes its label + dependency rows. */
 export function deleteIssue(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
 ): boolean {
-  const existing = resolveIssue(db, idOrIdentifier);
+  const existing = resolveIssue(db, project, idOrIdentifier);
   if (!existing) return false;
   db.delete(s.issues).where(eq(s.issues.id, existing.id)).run();
   return true;
@@ -264,15 +364,6 @@ export function deleteIssue(
 // ----------------------------------------------------------------------------
 // Questions — the agent clarification channel
 // ----------------------------------------------------------------------------
-//
-// A question is posted by an implementing agent against an `in_progress` issue
-// when it needs the human (via an orchestrating model) to clarify what to do.
-// State is *derived* from `answeredAt` (null ⇒ open). The lifecycle:
-//   - ask:    POST /api/issues/:id/questions          (requires in_progress)
-//   - answer: POST /api/issues/:id/questions/:n/respond (irreversible; 409 if
-//             already answered)
-// Numbering is a per-issue sequence assigned atomically inside the create
-// transaction. See CONTEXT.md ("Question", "Open / Answered").
 
 /** Map a stored question row to its DTO, deriving `status` from `answeredAt`. */
 function toQuestionDTO(q: s.QuestionRow): QuestionDTO {
@@ -293,9 +384,10 @@ function toQuestionDTO(q: s.QuestionRow): QuestionDTO {
  */
 export function getIssueQuestions(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
 ): QuestionDTO[] | null {
-  const issue = resolveIssue(db, idOrIdentifier);
+  const issue = resolveIssue(db, project, idOrIdentifier);
   if (!issue) return null;
   const rows = db
     .select()
@@ -321,10 +413,11 @@ export type AddQuestionResult =
  */
 export function addQuestion(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
   question: string,
 ): AddQuestionResult {
-  const existing = resolveIssue(db, idOrIdentifier);
+  const existing = resolveIssue(db, project, idOrIdentifier);
   if (!existing) return { ok: false, reason: "not_found" };
   if (existing.status !== "in_progress") {
     return { ok: false, reason: "not_in_progress", status: existing.status };
@@ -369,11 +462,12 @@ export type RespondResult =
  */
 export function respondToQuestion(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
   number: number,
   answer: string,
 ): RespondResult {
-  const issue = resolveIssue(db, idOrIdentifier);
+  const issue = resolveIssue(db, project, idOrIdentifier);
   if (!issue) return { ok: false, reason: "not_found" };
   const row = db
     .select()
@@ -418,9 +512,19 @@ export interface OpenQuestionEntry {
  * topical scope of one QA agent). Case-insensitive name match, mirroring
  * `listIssues`. The derived "Ready for Agent" label is N/A here — questions
  * require `in_progress`, which is never ready.
+ *
+ * Optional `project` restricts to issues in that project scope. When omitted,
+ * open questions from ALL projects are returned (this is the cross-project
+ * orchestrator view).
  */
-export function listOpenQuestions(db: DB, label?: string): OpenQuestionEntry[] {
-  const conds = [isNull(s.issueQuestions.answeredAt)];
+export function listOpenQuestions(
+  db: DB,
+  label?: string,
+  project?: ProjectRow,
+): OpenQuestionEntry[] {
+  // Pre-compute the set of issue ids the caller cares about, if any scoping
+  // applies. With no label and no project, every open question is in scope.
+  let scopedIssueIds: Set<number> | null = null;
 
   if (label) {
     const matched = db
@@ -430,38 +534,52 @@ export function listOpenQuestions(db: DB, label?: string): OpenQuestionEntry[] {
       .where(eq(s.labels.name, label))
       .all();
     if (matched.length === 0) return [];
-    const ids = matched.map((m) => m.issueId);
-    conds.push(inArray(s.issueQuestions.issueId, ids));
+    scopedIssueIds = new Set(matched.map((m) => m.issueId));
+  }
+
+  if (project) {
+    const inProject = db
+      .select({ id: s.issues.id })
+      .from(s.issues)
+      .where(eq(s.issues.projectId, project.id))
+      .all();
+    const projectSet = new Set(inProject.map((r) => r.id));
+    scopedIssueIds = scopedIssueIds
+      ? new Set([...scopedIssueIds].filter((id) => projectSet.has(id)))
+      : projectSet;
   }
 
   const rows = db
     .select()
     .from(s.issueQuestions)
-    .where(and(...conds))
+    .where(isNull(s.issueQuestions.answeredAt))
     .orderBy(asc(s.issueQuestions.createdAt))
     .all();
 
   // Materialize each issue once (deduped) so its full DTO — including the
   // Q&A history the answering model needs as context — is embedded per entry.
   const issueById = new Map<number, IssueDTO>();
-  return rows.map((q) => {
-    let issue = issueById.get(q.issueId);
-    if (!issue) {
-      const issueRow = db
-        .select()
-        .from(s.issues)
-        .where(eq(s.issues.id, q.issueId))
-        .get();
-      if (!issueRow) return null; // issue deleted concurrently; skip
-      issue = toIssueDTO(db, issueRow);
-      issueById.set(q.issueId, issue);
-    }
-    return { issue, question: toQuestionDTO(q) };
-  }).filter((e): e is OpenQuestionEntry => e !== null);
+  return rows
+    .filter((q) => (scopedIssueIds ? scopedIssueIds.has(q.issueId) : true))
+    .map((q) => {
+      let issue = issueById.get(q.issueId);
+      if (!issue) {
+        const issueRow = db
+          .select()
+          .from(s.issues)
+          .where(eq(s.issues.id, q.issueId))
+          .get();
+        if (!issueRow) return null; // issue deleted concurrently; skip
+        issue = toIssueDTO(db, issueRow);
+        issueById.set(q.issueId, issue);
+      }
+      return { issue, question: toQuestionDTO(q) };
+    })
+    .filter((e): e is OpenQuestionEntry => e !== null);
 }
 
 // ----------------------------------------------------------------------------
-// Labels
+// Claiming
 // ----------------------------------------------------------------------------
 
 export type ClaimResult =
@@ -479,13 +597,18 @@ export type ClaimResult =
  */
 export function claimIssue(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
 ): ClaimResult {
-  const existing = resolveIssue(db, idOrIdentifier);
+  const existing = resolveIssue(db, project, idOrIdentifier);
   if (!existing) return { ok: false, reason: "not_found" };
 
   if (existing.status === "in_progress") {
-    const updated = db.select().from(s.issues).where(eq(s.issues.id, existing.id)).get()!;
+    const updated = db
+      .select()
+      .from(s.issues)
+      .where(eq(s.issues.id, existing.id))
+      .get()!;
     return { ok: true, issue: toIssueDTO(db, updated) };
   }
 
@@ -498,7 +621,11 @@ export function claimIssue(
       .set({ status: "in_progress", updatedAt: now })
       .where(eq(s.issues.id, existing.id))
       .run();
-    const updated = db.select().from(s.issues).where(eq(s.issues.id, existing.id)).get()!;
+    const updated = db
+      .select()
+      .from(s.issues)
+      .where(eq(s.issues.id, existing.id))
+      .get()!;
     return { ok: true, issue: toIssueDTO(db, updated) };
   }
 
@@ -513,7 +640,7 @@ export function claimIssue(
  * List all labels, sorted by name. A stored label sharing the derived system
  * label's name (a leftover from older seed data) is excluded: that label is
  * virtual and never managed here, so surfacing a stale stored row would be
- * misleading.
+ * misleading. Labels are global across projects in the lean view-only model.
  */
 export function listLabels(db: DB): LabelDTO[] {
   const rows = db.select().from(s.labels).orderBy(asc(s.labels.name)).all();
@@ -572,10 +699,11 @@ export function deleteLabel(db: DB, id: number): boolean {
  */
 export function setIssueLabels(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
   labelNames: string[],
 ): IssueDTO | null {
-  const issue = resolveIssue(db, idOrIdentifier);
+  const issue = resolveIssue(db, project, idOrIdentifier);
   if (!issue) return null;
 
   const all = db.select().from(s.labels).all();
@@ -612,7 +740,11 @@ export function setIssueLabels(
     }
   });
 
-  const updated = db.select().from(s.issues).where(eq(s.issues.id, issue.id)).get()!;
+  const updated = db
+    .select()
+    .from(s.issues)
+    .where(eq(s.issues.id, issue.id))
+    .get()!;
   return toIssueDTO(db, updated);
 }
 
@@ -625,12 +757,13 @@ export interface DependencyEdge {
   blockedIssueId: number;
 }
 
-/** Return the blocker issues for a given issue. */
+/** Return the blocker issues for a given issue (scoped to its project). */
 export function getBlockers(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
 ): IssueDTO[] | null {
-  const issue = resolveIssue(db, idOrIdentifier);
+  const issue = resolveIssue(db, project, idOrIdentifier);
   if (!issue) return null;
   const rows = db
     .select()
@@ -651,9 +784,10 @@ export function getBlockers(
 /** Return the issues this issue is blocking (its dependents). */
 export function getBlockedBy(
   db: DB,
+  project: ProjectRow,
   idOrIdentifier: string | number,
 ): IssueDTO[] | null {
-  const issue = resolveIssue(db, idOrIdentifier);
+  const issue = resolveIssue(db, project, idOrIdentifier);
   if (!issue) return null;
   const rows = db
     .select()
@@ -674,8 +808,13 @@ export function getBlockedBy(
 /**
  * Add a "blocker blocks blocked" edge. Rejects:
  *  - either issue missing → returns null (caller maps to 404)
+ *  - the issues live in different projects → ValidationError (cross-project
+ *    edges are out of scope for the lean view-only model)
  *  - self-edge (blocker === blocked) → ValidationError (400)
  *  - would-create-cycle → ValidationError (400)
+ *
+ * Both endpoints are resolved against the same `project` scope: an issue in
+ * project LIN cannot block an issue in project OEMR, even by id.
  *
  * Cycle check: adding edge `blocker → blocked` (blocker blocks blocked) is
  * unsafe iff `blocker` is already transitively blocked by `blocked` — i.e.
@@ -685,16 +824,27 @@ export function getBlockedBy(
  */
 export function addBlocker(
   db: DB,
+  project: ProjectRow,
   blockedIdOrIdent: string | number,
   blockerIdOrIdent: string | number,
 ): DependencyEdge | null {
-  const blocked = resolveIssue(db, blockedIdOrIdent);
+  const blocked = resolveIssue(db, project, blockedIdOrIdent);
   if (!blocked) return null;
-  const blocker = resolveIssue(db, blockerIdOrIdent);
+  const blocker = resolveIssue(db, project, blockerIdOrIdent);
   if (!blocker) return null;
 
   if (blocker.id === blocked.id) {
     throw new ValidationError("an issue cannot block itself", "self_edge");
+  }
+
+  // Lean view-only model: deps live within a project. Both endpoints already
+  // resolved against the same scope, so this is structurally true; the check
+  // is a defensive guard against future cross-project resolution paths.
+  if (blocker.projectId !== blocked.projectId) {
+    throw new ValidationError(
+      "cross-project dependencies are not supported",
+      "cross_project",
+    );
   }
 
   // Cycle: does adding blocker→blocked close a loop? It would iff `blocked`
@@ -731,12 +881,13 @@ export function addBlocker(
 /** Remove a blocker edge. Returns false if the edge didn't exist. */
 export function removeBlocker(
   db: DB,
+  project: ProjectRow,
   blockedIdOrIdent: string | number,
   blockerIdOrIdent: string | number,
 ): boolean | null {
-  const blocked = resolveIssue(db, blockedIdOrIdent);
+  const blocked = resolveIssue(db, project, blockedIdOrIdent);
   if (!blocked) return null;
-  const blocker = resolveIssue(db, blockerIdOrIdent);
+  const blocker = resolveIssue(db, project, blockerIdOrIdent);
   if (!blocker) return null;
 
   const existing = db
