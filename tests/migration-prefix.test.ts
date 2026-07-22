@@ -27,7 +27,7 @@ import { PROJECT_PREFIX } from "../src/lib/config";
 // the migration's env-based fallback would produce the wrong (unreachable) key.
 const LEGACY_PREFIX = PROJECT_PREFIX === "OEMR" ? "ACME" : "OEMR";
 
-function seedLegacyDb(path: string): void {
+function seedLegacyDb(path: string, prefix: string = LEGACY_PREFIX): void {
   const raw = new Database(path);
   raw.pragma("journal_mode = WAL");
   raw.exec(`
@@ -72,7 +72,7 @@ function seedLegacyDb(path: string): void {
       .prepare(
         "INSERT INTO issues (number, identifier, title, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(number, `${LEGACY_PREFIX}-${number}`, title, "todo", 1, now, now);
+      .run(number, `${prefix}-${number}`, title, "todo", 1, now, now);
   }
   raw.close();
 }
@@ -80,13 +80,20 @@ function seedLegacyDb(path: string): void {
 describe("legacy migration keys default project off issue prefix, not TRACKER_PREFIX", () => {
   let dir = "";
   let dbPath = "";
+  let savedDbPathEnv: string | undefined;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "lc-migrate-prefix-"));
     dbPath = join(dir, "legacy.db");
+    // Point the pre-migration snapshot (written next to dbPath()) at the temp
+    // dir instead of the repo's data/ directory.
+    savedDbPathEnv = process.env.TRACKER_DB_PATH;
+    process.env.TRACKER_DB_PATH = dbPath;
   });
 
   afterEach(() => {
+    if (savedDbPathEnv === undefined) delete process.env.TRACKER_DB_PATH;
+    else process.env.TRACKER_DB_PATH = savedDbPathEnv;
     try {
       rmSync(dir, { recursive: true, force: true });
     } catch {
@@ -118,6 +125,26 @@ describe("legacy migration keys default project off issue prefix, not TRACKER_PR
         const found = resolveIssue(db, project, `${LEGACY_PREFIX}-${number}`);
         expect(found, `${LEGACY_PREFIX}-${number} should resolve`).not.toBeNull();
         expect(found!.identifier).toBe(`${LEGACY_PREFIX}-${number}`);
+      }
+    } finally {
+      raw.close();
+    }
+  });
+
+  it("lowercase legacy prefix is preserved verbatim and stays resolvable", () => {
+    // Legacy configs never uppercased TRACKER_PREFIX, so lowercase identifiers
+    // like `lin-1` are valid legacy data. The derived key must match their
+    // stored casing for resolveIssue's case-sensitive row lookup to hit.
+    const lower = LEGACY_PREFIX.toLowerCase();
+    seedLegacyDb(dbPath, lower);
+    const { db, raw } = createDb(dbPath);
+    try {
+      const project = getDefaultProject(db)!;
+      expect(project.key).toBe(lower);
+      for (const number of [1, 2, 3]) {
+        const found = resolveIssue(db, project, `${lower}-${number}`);
+        expect(found, `${lower}-${number} should resolve`).not.toBeNull();
+        expect(found!.identifier).toBe(`${lower}-${number}`);
       }
     } finally {
       raw.close();

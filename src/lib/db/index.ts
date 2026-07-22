@@ -377,7 +377,11 @@ function rebuildLegacyIssuesTable(raw: Database.Database): void {
  * (the part before the first `-`, e.g. `LIN` in `LIN-1`). Project keys are
  * 1–10 ASCII letters with no `-`, so splitting on the first `-` is safe. The
  * single-project legacy schema has one global prefix; if identifiers are
- * somehow non-uniform we take the most common prefix. Returns null when there
+ * somehow non-uniform we take the most common prefix, grouping
+ * case-insensitively but returning the prefix exactly as stored — identifiers
+ * are copied verbatim and resolveIssue's row lookup is case-sensitive, so the
+ * key must match the stored casing (legacy configs never uppercased
+ * TRACKER_PREFIX, so `lin-1` is valid legacy data). Returns null when there
  * are no issues (fresh/empty legacy DB) so the caller falls back to
  * PROJECT_PREFIX.
  */
@@ -385,16 +389,30 @@ function legacyIssuePrefix(raw: Database.Database): string | null {
   const rows = raw
     .prepare("SELECT identifier FROM issues")
     .all() as { identifier: string }[];
-  const counts = new Map<string, number>();
+  const groups = new Map<string, Map<string, number>>();
   for (const { identifier } of rows) {
     const dash = identifier.indexOf("-");
     if (dash <= 0) continue; // malformed; skip
-    const prefix = identifier.slice(0, dash).toUpperCase();
-    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+    const prefix = identifier.slice(0, dash);
+    const upper = prefix.toUpperCase();
+    const variants = groups.get(upper) ?? new Map<string, number>();
+    variants.set(prefix, (variants.get(prefix) ?? 0) + 1);
+    groups.set(upper, variants);
   }
+  let bestVariants: Map<string, number> | null = null;
+  let bestTotal = 0;
+  for (const variants of groups.values()) {
+    let total = 0;
+    for (const n of variants.values()) total += n;
+    if (total > bestTotal) {
+      bestVariants = variants;
+      bestTotal = total;
+    }
+  }
+  if (!bestVariants) return null;
   let best: string | null = null;
   let bestN = 0;
-  for (const [prefix, n] of counts) {
+  for (const [prefix, n] of bestVariants) {
     if (n > bestN) {
       best = prefix;
       bestN = n;
