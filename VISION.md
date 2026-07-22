@@ -110,7 +110,7 @@ alphabetic prefix (its `key`: `AUTH-42`, `UI-13`) and its own number
 sequence. Identifiers are self-documenting (you can tell which project a
 ticket belongs to from the ticket itself), and the migration back-fills a
 legacy single-project DB into a default project that inherits the existing
-prefix (`TRACKER_PREFIX`) and number counter. This is the Linear model and
+prefix (derived from the issues' own identifiers) and number counter. This is the Linear model and
 the frame of reference the tracker started from.
 
 The rejected alternative was keeping a single global identifier with a

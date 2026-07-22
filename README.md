@@ -70,9 +70,10 @@ Open http://localhost:3000. The database is created at `data/tracker.db` on
 first run, seeded with four default labels (`ready-for-agent`, `bug`,
 `feature`, `chore`), and bootstrapped with a default project whose key comes
 from `TRACKER_PREFIX`. A pre-existing single-project database is migrated in
-place on next start: its issues are backfilled into the default project, and
-if it holds data, a timestamped snapshot file is written next to the DB
-first.
+place on next start: its issues are backfilled into a default project keyed
+off their existing identifier prefix (uppercased; `TRACKER_PREFIX` is only
+used when the legacy DB holds no issues), and if it holds data, a timestamped
+snapshot file is written next to the DB first.
 
 ### One-time setup / reset
 
@@ -84,7 +85,7 @@ first.
 | Var | Default | Purpose |
 |---|---|---|
 | `TRACKER_DB_PATH` | `data/tracker.db` | Location of the SQLite file. |
-| `TRACKER_PREFIX` | `LIN` | Key of the default project bootstrapped on first run (stored uppercased; a project's key is its identifier prefix). Further projects are created via the API with their own keys. |
+| `TRACKER_PREFIX` | `LIN` | Key of the default project bootstrapped on first run (stored uppercased; a project's key is its identifier prefix). Ignored when migrating a legacy DB that already has issues — their prefix wins (see above). Further projects are created via the API with their own keys. |
 | `TRACKER_SEED` | `true` | Set to `false` to skip seeding default labels. |
 
 ---
