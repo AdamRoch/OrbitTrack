@@ -295,9 +295,16 @@ function rebuildLegacyIssuesTable(raw: Database.Database): void {
   `);
 
   // Step 2: ensure a default project and seed its sequence. The default key
-  // comes from PROJECT_PREFIX (TRACKER_PREFIX env, default "LIN" — see
-  // config.ts).
-  const defaultProject = ensureDefaultProject(raw);
+  // must come from the EXISTING issues' identifier prefix, not from
+  // PROJECT_PREFIX: legacy identifiers (e.g. LIN-1) are copied below
+  // (uppercased, matching the key), and resolveIssue rejects any identifier
+  // whose prefix != project.key. If the operator changed TRACKER_PREFIX before
+  // the upgrade boot, keying the default project off PROJECT_PREFIX would
+  // leave every migrated ticket unreachable by identifier. The single-project
+  // legacy schema has one global prefix, so all issues share it. Only fall
+  // back to PROJECT_PREFIX when there are no issues.
+  const legacyKey = legacyIssuePrefix(raw);
+  const defaultProject = ensureDefaultProject(raw, legacyKey);
 
   // Seed from the legacy high-water counter if present (preferred — it is the
   // authoritative never-reuse sequence). Fall back to MAX(number) so we never
@@ -342,7 +349,7 @@ function rebuildLegacyIssuesTable(raw: Database.Database): void {
   raw.prepare(
     `INSERT INTO issues_new
        (id, number, identifier, project_id, title, description, status, priority, created_at, updated_at)
-     SELECT id, number, identifier, ?, title, description, status, priority, created_at, updated_at
+     SELECT id, number, UPPER(identifier), ?, title, description, status, priority, created_at, updated_at
      FROM issues`,
   ).run(defaultProject.id);
 
@@ -366,6 +373,40 @@ function rebuildLegacyIssuesTable(raw: Database.Database): void {
   raw.exec("DROP TABLE IF EXISTS meta;");
 }
 
+/**
+ * Derive the default project's key from the legacy issues' identifier prefix
+ * (the part before the first `-`, e.g. `LIN` in `LIN-1`). Project keys are
+ * 1–10 ASCII letters with no `-`, so splitting on the first `-` is safe. The
+ * single-project legacy schema has one global prefix; if identifiers are
+ * somehow non-uniform we take the most common prefix. The key is uppercased
+ * per the project-key convention — legacy configs never uppercased
+ * TRACKER_PREFIX, so `lin-1` is valid legacy data; the migration uppercases
+ * the copied identifiers to match, making a migrated DB indistinguishable
+ * from a fresh one. Returns null when there are no issues (fresh/empty legacy
+ * DB) so the caller falls back to PROJECT_PREFIX.
+ */
+function legacyIssuePrefix(raw: Database.Database): string | null {
+  const rows = raw
+    .prepare("SELECT identifier FROM issues")
+    .all() as { identifier: string }[];
+  const counts = new Map<string, number>();
+  for (const { identifier } of rows) {
+    const dash = identifier.indexOf("-");
+    if (dash <= 0) continue; // malformed; skip
+    const prefix = identifier.slice(0, dash).toUpperCase();
+    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let bestN = 0;
+  for (const [prefix, n] of counts) {
+    if (n > bestN) {
+      best = prefix;
+      bestN = n;
+    }
+  }
+  return best;
+}
+
 function tableExists(raw: Database.Database, name: string): boolean {
   const row = raw
     .prepare(
@@ -384,24 +425,42 @@ function columnExists(raw: Database.Database, table: string, col: string): boole
 }
 
 /**
- * Ensure the default project exists (key from the TRACKER_PREFIX env var,
- * default LIN — see PROJECT_PREFIX in config.ts). Idempotent: returns the
- * existing row if present. The first project by id is the "default" for API
- * requests that don't specify `?project=KEY`.
+ * Ensure the default project exists. The key defaults to the TRACKER_PREFIX env
+ * var (PROJECT_PREFIX, default LIN — see config.ts), but the legacy migration
+ * passes `keyOverride` set to the existing issues' actual prefix so migrated
+ * identifiers stay resolvable regardless of the current TRACKER_PREFIX.
+ * Idempotent: returns the existing row if present. The first project by id is
+ * the "default" for API requests that don't specify `?project=KEY`.
  *
  * Returns the plain row shape used by the migration path; live code reads the
  * project through Drizzle.
  */
-function ensureDefaultProject(raw: Database.Database): {
+function ensureDefaultProject(
+  raw: Database.Database,
+  keyOverride?: string | null,
+): {
   id: number;
   key: string;
   name: string;
   nextNumber: number;
 } {
-  const key = PROJECT_PREFIX;
-  const existing = raw
-    .prepare("SELECT id, key, name, next_number FROM projects WHERE key = ?")
-    .get(key) as
+  // Without an override, "the default project" is whatever project already
+  // exists at the lowest id — NOT a fresh lookup by PROJECT_PREFIX. This matters
+  // after a legacy migration keyed off the issues' prefix: if the operator
+  // changed TRACKER_PREFIX, a PROJECT_PREFIX lookup would miss the migrated
+  // project and wrongly create a second one. Only when no project exists at all
+  // (fresh DB) do we create one keyed by PROJECT_PREFIX.
+  const key = keyOverride ?? PROJECT_PREFIX;
+  const lookup = keyOverride != null
+    ? raw
+        .prepare("SELECT id, key, name, next_number FROM projects WHERE key = ?")
+        .get(key)
+    : raw
+        .prepare(
+          "SELECT id, key, name, next_number FROM projects ORDER BY id LIMIT 1",
+        )
+        .get();
+  const existing = lookup as
     | { id: number; key: string; name: string; next_number: number }
     | undefined;
   if (existing) {

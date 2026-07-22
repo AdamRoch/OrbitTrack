@@ -1,8 +1,10 @@
 /**
  * Project-wide constants. Multi-project support lives in the `projects` table;
  * the value below is the *key* used to seed the default project on first boot
- * (and to backfill a legacy single-project DB). After boot, each project's
- * identifier prefix is its own `key`.
+ * of a fresh DB. (A legacy single-project backfill keys the default project
+ * off its issues' existing identifier prefix instead — see db/index.ts —
+ * falling back to this value only when the legacy DB has no issues.) After
+ * boot, each project's identifier prefix is its own `key`.
  */
 export const PROJECT_PREFIX =
   (process.env.TRACKER_PREFIX?.trim() || "LIN").toUpperCase();
