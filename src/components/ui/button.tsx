@@ -47,16 +47,11 @@ export function Button({
     className,
   );
 
-  const inner = (
-    <>
-      {children}
-      {icon && (
-        <span className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/10 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px group-hover:scale-110 dark:bg-white/10">
-          {icon}
-        </span>
-      )}
-    </>
-  );
+  const iconNode = icon ? (
+    <span className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/10 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px group-hover:scale-110 dark:bg-white/10">
+      {icon}
+    </span>
+  ) : null;
 
   if (asChild && isValidElement(children)) {
     // Merge our classes onto the single child element (lightweight Slot).
@@ -66,11 +61,6 @@ export function Button({
       className?: string;
       children?: ReactNode;
     }>;
-    const iconNode = icon ? (
-      <span className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/10 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-px group-hover:scale-110 dark:bg-white/10">
-        {icon}
-      </span>
-    ) : null;
     return cloneElement(
       child,
       { className: cn(classes, child.props.className) },
@@ -83,7 +73,8 @@ export function Button({
 
   return (
     <button type={type} className={classes} {...props}>
-      {inner}
+      {children}
+      {iconNode}
     </button>
   );
 }

@@ -1,5 +1,4 @@
 import type { IssueStatus, Priority } from "@/lib/db/schema";
-import { priorityLabels } from "@/lib/db/schema";
 
 /**
  * The single source of truth for status + priority colors across the UI.
@@ -30,11 +29,3 @@ export const PRIORITY_COLOR: Record<Priority, string> = {
   3: "#e2b65d",
   4: "#eb5757",
 };
-
-/** Priority → dot color, reusing the palette. `0` renders as "—" upstream. */
-export function priorityColor(p: Priority): string {
-  return PRIORITY_COLOR[p];
-}
-
-/** Re-export so forms that need the label map can import from one place. */
-export { priorityLabels };

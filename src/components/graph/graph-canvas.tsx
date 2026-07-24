@@ -30,6 +30,11 @@ import { STATUS_META, PRIORITY_COLOR } from "@/lib/visual-tokens";
  * ReactFlow hard requirement (App Router): `nodeTypes` must be defined at
  * module scope, not inside the component, or React re-creates the map on every
  * render and warns. Same for `defaultEdgeOptions`.
+ *
+ * In SSR, ReactFlow renders nodes with `visibility:hidden` and computes edge
+ * paths only after a DOM measurement pass that runs on the client. Mounting
+ * client-only means ReactFlow initializes once, cleanly, against a real
+ * measured container — so both nodes and edges render correctly.
  */
 
 const nodeTypes = { issue: IssueNode };
@@ -40,23 +45,6 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
   markerEnd: { type: MarkerType.ArrowClosed, color: "#a3e635" },
   style: { stroke: "#a3e635", strokeOpacity: 0.5, strokeWidth: 1.5 },
 };
-
-/**
- * The dependency-graph canvas. A client island: the server component at
- * /app/map/page.tsx reads the issue list and hands it in as a prop; this
- * component derives nodes/edges, runs dagre for a layered layout, and renders
- * the interactive surface.
- *
- * ReactFlow hard requirement (App Router): `nodeTypes` must be defined at
- * module scope, not inside the component, or React re-creates the map on every
- * render and warns. Same for `defaultEdgeOptions`.
- *
- * We mount ReactFlow only after the client is ready (mounted guard). In SSR,
- * ReactFlow renders nodes with `visibility:hidden` and computes edge paths
- * only after a DOM measurement pass that runs on the client. Mounting client-
- * only means ReactFlow initializes once, cleanly, against a real measured
- * container — so both nodes and edges render correctly.
- */
 
 export function GraphCanvas({ issues }: { issues: GraphIssue[] }) {
   const router = useRouter();

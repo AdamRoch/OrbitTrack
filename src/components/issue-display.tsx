@@ -5,10 +5,6 @@ import type { IssueStatus, Priority } from "@/lib/db/schema";
 import { priorityLabels } from "@/lib/db/schema";
 import { STATUS_META, PRIORITY_COLOR } from "@/lib/visual-tokens";
 
-// Re-export so existing callers keep working after the palette moved to
-// visual-tokens (shared with the graph canvas).
-export { STATUS_META };
-
 export function StatusBadge({ status }: { status: IssueStatus }) {
   const meta = STATUS_META[status];
   return (

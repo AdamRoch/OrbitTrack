@@ -41,12 +41,10 @@ export default async function IssueDetailPage({
   const issue = getIssue(db, project, identifier);
   if (!issue) notFound();
 
-  const [blockers, blockedBy, allLabels, descriptionHtml] = await Promise.all([
-    getBlockers(db, project, identifier) ?? [],
-    getBlockedBy(db, project, identifier) ?? [],
-    Promise.resolve(listLabels(db)),
-    renderMarkdown(issue.description),
-  ]);
+  const descriptionHtml = await renderMarkdown(issue.description);
+  const blockers = getBlockers(db, project, identifier) ?? [];
+  const blockedBy = getBlockedBy(db, project, identifier) ?? [];
+  const allLabels = listLabels(db);
 
   // The back-link carries the project context.
   const backHref = `/?project=${project.key}`;

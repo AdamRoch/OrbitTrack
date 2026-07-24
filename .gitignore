@@ -29,6 +29,7 @@
 /data/*.db-journal
 /data/*.db-wal
 /data/*.db-shm
+/data/*.db.bak
 # pre-migration snapshots written into data/ at runtime
 /data/migration-snapshot-*.md
 

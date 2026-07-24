@@ -6,8 +6,8 @@
  * We keep the same token *names* the app already references (--surface,
  * --accent, ...) so every existing component keeps working, but shift the
  * values to a vantablack glass palette. Surfaces are translucent so the fixed
- * starfield/nebula behind them reads through as glass. New tokens (--accent-2,
- * --glow, ...) drive the alien accent system.
+ * starfield/nebula behind them reads through as glass. The alien accent system
+ * is driven by --accent / --glow.
  */
 :root {
   --background: #04060c;
@@ -21,14 +21,10 @@
   --foreground-subtle: #5e6f8c;
   --accent: #a3e635; /* vivid lime */
   --accent-hover: #bef264;
-  --accent-2: #a78bfa; /* violet */
-  --accent-3: #7dd3fc; /* sky */
   --danger: #ff6b81;
   --success: #4ade80;
-  --warning: #fbbf24;
-  /* RGB triplets for glow shadows (rgba(var(--glow), x)) */
+  /* RGB triplet for glow shadows (rgba(var(--glow), x)) */
   --glow: 163, 230, 53;
-  --glow-2: 167, 139, 250;
 }
 
 @theme inline {
@@ -43,11 +39,8 @@
   --color-foreground-subtle: var(--foreground-subtle);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
-  --color-accent-2: var(--accent-2);
-  --color-accent-3: var(--accent-3);
   --color-danger: var(--danger);
   --color-success: var(--success);
-  --color-warning: var(--warning);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
@@ -265,13 +258,6 @@ body {
     0 0 22px -6px rgba(var(--glow), 0.55),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
-.glow-edge-strong {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-strong));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
-    0 0 34px -4px rgba(var(--glow), 0.7),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
-}
 .glow-edge-pulse {
   animation: edge-pulse 3.2s ease-in-out infinite;
 }
@@ -335,32 +321,6 @@ body {
   }
   100% {
     background-position: -120% 0;
-  }
-}
-
-/* Gentle ambient motion utilities. */
-.float-soft {
-  animation: float-soft 5s ease-in-out infinite;
-}
-@keyframes float-soft {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-.drift-x {
-  animation: drift-x 9s ease-in-out infinite;
-}
-@keyframes drift-x {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(10px);
   }
 }
 
@@ -514,23 +474,6 @@ body {
   animation: ufo-float 2.4s ease-in-out infinite;
 }
 
-/*
- * 3D backdrop canvas (Three.js, client-only). Sits above the CSS nebula/
- * starfield layers but still behind all content (z-0). Transparent so the CSS
- * backdrop reads through. pointer-events: none keeps it purely decorative.
- */
-.space-scene-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-.space-scene-canvas canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-}
-
 /* Legend dot that mirrors the ready-node pulse. */
 .graph-legend-pulse {
   display: inline-block;
@@ -553,9 +496,7 @@ body {
   .starfield-2,
   .nebula,
   .glow-edge-pulse,
-  .ticket-panel::before,
-  .float-soft,
-  .drift-x {
+  .ticket-panel::before {
     animation: none;
   }
   .reveal {
