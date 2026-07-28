@@ -97,12 +97,12 @@ export function FilterBar({
     );
 
   return (
-    // NOTE: relative z-20 lifts the whole bar's stacking context above the
-    // ticket list below. Without it, the floating quick picks / cheat sheet
-    // (which extend past the bar's bottom edge) paint UNDER the list:
-    // .glass sets backdrop-filter, which creates a stacking context at
-    // z-index auto, so inner z-10 can't beat later `position: relative`
-    // panels (.ticket-panel) in DOM order.
+    // NOTE: relative z-20 keeps the floating quick picks / cheat sheet above
+    // sibling content inside the bar's Reveal wrapper. The decisive stacking
+    // fix lives in page.tsx: the FilterBar's <Reveal> itself carries
+    // "relative z-20", because .reveal sets will-change: transform (a
+    // permanent stacking context) and the ticket-panel Reveal comes later in
+    // DOM order — inner z-indexes can't escape that.
     <div className="glass glow-edge relative z-20 flex flex-wrap items-end gap-3 mb-5 rounded-2xl p-3">
       <div className="group relative flex flex-col gap-1">
         <label className="text-xs text-[--foreground-muted]">Status</label>

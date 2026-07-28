@@ -104,16 +104,27 @@ export function LabelChips({ labels }: { labels: LabelDTO[] }) {
  */
 const ROW_STATUS_STYLE: Record<
   IssueStatus,
-  { row: string; glyph?: "check" | "spinner" }
+  { row: string; id: string; glyph?: "check" | "spinner" }
 > = {
-  todo: { row: "border-l-[#4cb782] bg-[#4cb782]/[0.06]" },
+  todo: {
+    row: "border-l-[#4ade80] bg-[#4ade80]/[0.15]",
+    id: "text-[#4ade80]",
+  },
   in_progress: {
-    row: "border-l-[#5e6ad2] bg-[#5e6ad2]/[0.06]",
+    row: "border-l-[#7c8cff] bg-[#7c8cff]/[0.15]",
+    id: "text-[#7c8cff]",
     glyph: "spinner",
   },
-  done: { row: "border-l-[#2f8f66] bg-[#2f8f66]/[0.10]", glyph: "check" },
-  backlog: { row: "border-l-[#6c7a6e]/50 bg-[#6c7a6e]/[0.05] opacity-75" },
-  canceled: { row: "opacity-55" },
+  done: {
+    row: "border-l-[#1f7a54] bg-[#1f7a54]/[0.30]",
+    id: "text-[#3cb88a]",
+    glyph: "check",
+  },
+  backlog: {
+    row: "border-l-[#7d8a7e]/60 bg-[#7d8a7e]/[0.10] opacity-75",
+    id: "text-[#8a988b]",
+  },
+  canceled: { row: "opacity-55", id: "" },
 };
 
 /** A single row in a list of issues (used by list + frontier views). */
@@ -138,14 +149,19 @@ export function IssueRow({
       {style && (
         <span className="flex h-4 w-4 shrink-0 items-center justify-center">
           {style.glyph === "check" && (
-            <CheckIcon className="h-3.5 w-3.5 text-[#4cb782]" />
+            <CheckIcon className="h-3.5 w-3.5 text-[#3cb88a]" />
           )}
           {style.glyph === "spinner" && (
-            <span className="h-3 w-3 animate-spin rounded-full border border-[#5e6ad2]/40 border-t-[#5e6ad2]" />
+            <span className="h-3 w-3 animate-spin rounded-full border border-[#7c8cff]/40 border-t-[#7c8cff]" />
           )}
         </span>
       )}
-      <span className="font-mono text-xs text-[--foreground-subtle] w-20 shrink-0">
+      <span
+        className={cn(
+          "font-mono text-xs text-[--foreground-subtle] w-20 shrink-0",
+          style?.id,
+        )}
+      >
         {issue.identifier}
       </span>
       <span className="flex-1 truncate text-sm text-[--foreground] transition-colors group-hover:text-white">

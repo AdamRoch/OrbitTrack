@@ -211,7 +211,8 @@ kept a DAG: self-edges and cycles are rejected at write time with `400`.
 
 ## UI
 
-- **`/`** — ticket list, defaulting to To Do. The status dropdown covers
+- **`/`** — ticket list, defaulting to To Do, sorted by ticket number. The
+  status dropdown covers
   every status plus "Any", and hovering it reveals To Do / In Progress quick
   picks; priority/label filters and a project switcher round out the bar.
   Single-key status shortcuts work anywhere on the page (not while typing in

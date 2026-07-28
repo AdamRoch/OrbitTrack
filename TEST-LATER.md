@@ -21,11 +21,13 @@ Run `npm test` with no dev server running when convenient.
   - Quick picks appear on hover AND on keyboard focus of the select.
   - The active quick pick is highlighted (To do highlighted by default).
   - The floating panel isn't clipped by the `.glass` filter bar (overflow).
-  - ~~Tooltip hidden behind the ticket list~~ — fixed 2026-07-28: the bar
-    now has `relative z-20` (backdrop-filter on `.glass` creates a stacking
-    context at z-auto, so inner z-10 lost to later `.ticket-panel`s in DOM
-    order). Verify both the quick picks and the `?` cheat sheet paint ABOVE
-    the first ticket card.
+  - ~~Tooltip hidden behind the ticket list~~ — fixed 2026-07-28, then
+    RE-fixed same day: the bar's `relative z-20` wasn't enough because each
+    `<Reveal>` sets `will-change: transform` (a permanent stacking context)
+    and the ticket-panel Reveal comes later in DOM order. Real fix: the
+    FilterBar's `<Reveal>` in page.tsx carries `relative z-20`. Verify the
+    `?` cheat sheet AND quick picks paint above the first ticket card even
+    after the reveal animations finish.
   - Dropdown "Any" → `?status=all`; picking To Do clears the param.
   - "Clear" appears for priority/label filters or a non-default status, and
     resets to the default todo view.
@@ -64,6 +66,18 @@ Run `npm test` with no dev server running when convenient.
   - Filtered views (e.g. default To Do) show NO tint; frontier unchanged.
   - New `CheckIcon` in `src/components/icons.tsx`.
 - Typecheck + eslint clean; full suite still pending (see header).
+
+### Round 2 (same day): visibility + ordering feedback
+
+- ROW_STATUS_STYLE v2 — user found v1 tints barely visible. Now: tint alpha
+  ~0.15 (done 0.30), brighter hues (todo #4ade80, in_progress #7c8cff, done
+  #1f7a54), and the identifier text itself is status-colored. Manual check:
+  at a glance, all five statuses distinguishable on `/?status=all`.
+- `src/app/page.tsx` — list now sorts by ticket number ascending
+  (`issues.sort((a, b) => a.number - b.number)`), overriding the domain's
+  priority-desc ordering for the page only; the REST API ordering is
+  unchanged (tests/issues.test.ts pins it). Manual check: rows read
+  LIN-1, LIN-2, … regardless of priority, in every filtered view too.
 
 Also still unverified by a full suite run: the issue→ticket copy rename and
 the always-rendered project switcher.

@@ -49,6 +49,9 @@ export default async function IssuesPage({
   const issues = project
     ? listIssues(db, project, { status, priority, label })
     : [];
+  // The domain/API ordering is priority-based (right for agents); humans
+  // scan by identifier, so the list page sorts by ticket number ascending.
+  issues.sort((a, b) => a.number - b.number);
   const hasFilters = Boolean(
     priorityRaw || label || (statusParam && statusParam !== "todo"),
   );
@@ -85,7 +88,7 @@ export default async function IssuesPage({
         </div>
       </Reveal>
 
-      <Reveal delay={80}>
+      <Reveal delay={80} className="relative z-20">
         <FilterBar labels={labels} current={{ status, priority, label }} />
       </Reveal>
 
