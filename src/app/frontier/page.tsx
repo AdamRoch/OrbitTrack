@@ -44,7 +44,7 @@ export default async function FrontierPage({
               )}
             </h1>
             <p className="mt-1 text-sm text-[--foreground-muted]">
-              Issues that are <code className="text-xs text-[--accent]">todo</code> and whose every
+              Tickets that are <code className="text-xs text-[--accent]">todo</code> and whose every
               blocker is <code className="text-xs text-[--accent]">done</code>. Ready to pick up.
             </p>
           </div>
@@ -64,7 +64,7 @@ export default async function FrontierPage({
                   Nothing ready right now.
                 </p>
                 <p className="text-xs text-[--foreground-subtle] mt-1">
-                  Move a blocked issue forward, or mark a blocker done.
+                  Move a blocked ticket forward, or mark a blocker done.
                 </p>
               </div>
             ) : (
@@ -75,7 +75,7 @@ export default async function FrontierPage({
       </Reveal>
 
       <p className="mt-3 text-xs text-[--foreground-subtle] text-right">
-        {frontier.length} ready {frontier.length === 1 ? "issue" : "issues"}
+        {frontier.length} ready {frontier.length === 1 ? "ticket" : "tickets"}
       </p>
 
       <Reveal delay={140}>

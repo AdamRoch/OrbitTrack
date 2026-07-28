@@ -17,12 +17,26 @@ describe("UI smoke", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toMatch(/OrbitTrack/);
-    expect(html).toMatch(/Issues/);
+    expect(html).toMatch(/Tickets/);
     expect(html).toMatch(/New/);
     // Filter controls present.
     expect(html).toMatch(/name="status"|Status/);
     // The seeded label appears as a filter option.
     expect(html).toMatch(/smoke-label/);
+    // Project switcher always renders, even with a single project (ORBT-2).
+    expect(html).toMatch(/>Project<\/label>/);
+    expect(html).toMatch(/aria-label="New project"/);
+  });
+
+  it("project switcher lists a newly created project", async () => {
+    const created = await api.createProject({ key: "zz", name: "Zeta Zone" });
+    expect(created.status).toBe(201);
+
+    const res = await api.fetch("/");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // The new project is one of the switcher's options (server-rendered).
+    expect(html).toMatch(/value="ZZ"/);
   });
 
   it("detail page renders title, status, description, and dependency sections", async () => {
@@ -49,11 +63,32 @@ describe("UI smoke", () => {
     const res = await api.fetch("/new");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toMatch(/New issue/);
+    expect(html).toMatch(/New ticket/);
+    expect(html).toMatch(/name="projectKey"/);
     expect(html).toMatch(/name="title"/);
     expect(html).toMatch(/name="description"/);
     expect(html).toMatch(/name="status"/);
     expect(html).toMatch(/name="priority"/);
+  });
+
+  it("new-ticket form has a project picker defaulting to the URL scope", async () => {
+    const created = await api.createProject({ key: "pk", name: "Picker" });
+    expect(created.status).toBe(201);
+
+    // Scoped: the picker lists every project plus the inline-create option,
+    // and preselects the ?project= scope (React SSR marks it `selected`).
+    const res = await api.fetch("/new?project=PK");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toMatch(/<option value="LIN"/);
+    expect(html).toMatch(/<option value="PK"/);
+    expect(html).toMatch(/value="__new__"/);
+    expect(html).toMatch(/<option value="PK" selected=""/);
+
+    // Unscoped: the default project (LIN) is preselected instead.
+    const unscoped = await api.fetch("/new");
+    const unscopedHtml = await unscoped.text();
+    expect(unscopedHtml).toMatch(/<option value="LIN" selected=""/);
   });
 
   it("frontier page renders the frontier explainer", async () => {

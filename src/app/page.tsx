@@ -53,7 +53,7 @@ export default async function IssuesPage({
               Mission log
             </span>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[--foreground] text-glow">
-              Issues
+              Tickets
               {project && (
                 <span className="ml-3 align-middle font-mono text-base text-[--foreground-muted]">
                   {project.key}
@@ -68,7 +68,7 @@ export default async function IssuesPage({
             <ProjectSwitcher projects={projects} activeKey={project?.key ?? null} />
             <Button asChild variant="primary" size="md" icon={<CometIcon className="h-3.5 w-3.5" />}>
               <Link href={project ? `/new?project=${project.key}` : "/new"}>
-                New issue
+                New ticket
               </Link>
             </Button>
           </div>
@@ -96,7 +96,7 @@ export default async function IssuesPage({
       </Reveal>
 
       <p className="mt-3 text-xs text-[--foreground-subtle] text-right">
-        {issues.length} {issues.length === 1 ? "issue" : "issues"}
+        {issues.length} {issues.length === 1 ? "ticket" : "tickets"}
       </p>
     </div>
   );
@@ -110,14 +110,14 @@ function EmptyState({ hasFilters, noProjects }: { hasFilters: boolean; noProject
       </span>
       <p className="text-sm text-[--foreground-muted]">
         {noProjects
-          ? "No projects yet. Create one via POST /api/projects."
+          ? "No projects yet. Create one from the project switcher above."
           : hasFilters
-            ? "No issues match these filters."
-            : "No issues yet. Create your first one."}
+            ? "No tickets match these filters."
+            : "No tickets yet. Create your first one."}
       </p>
       {!hasFilters && !noProjects && (
         <Button asChild variant="secondary" size="sm" className="mt-4" icon={<CometIcon className="h-3.5 w-3.5" />}>
-          <Link href="/new">New issue</Link>
+          <Link href="/new">New ticket</Link>
         </Button>
       )}
     </div>

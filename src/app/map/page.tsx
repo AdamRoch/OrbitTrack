@@ -89,12 +89,12 @@ function EmptyGraph({ projectMissing }: { projectMissing: boolean }) {
       </h1>
       <p className="mt-2 max-w-sm text-sm text-[--foreground-muted]">
         {projectMissing
-          ? "Create a project via POST /api/projects, then switch to it."
-          : "Create an issue, then link blockers on its detail page. The graph will render every dependency and highlight what is ready to pick up."}
+          ? "Create a project from the project switcher above, then switch to it."
+          : "Create a ticket, then link blockers on its detail page. The graph will render every dependency and highlight what is ready to pick up."}
       </p>
       {!projectMissing && (
         <Button asChild variant="primary" size="sm" className="mt-5" icon={<CometIcon className="h-3.5 w-3.5" />}>
-          <Link href="/new">New issue</Link>
+          <Link href="/new">New ticket</Link>
         </Button>
       )}
     </div>

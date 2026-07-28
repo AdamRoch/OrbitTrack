@@ -56,7 +56,7 @@ export default async function IssueDetailPage({
         className="inline-flex items-center gap-1 text-xs text-[--foreground-muted] hover:text-[--foreground] mb-4 transition-colors"
       >
         <span className="rotate-180">→</span>
-        Back to {project.key} issues
+        Back to {project.key} tickets
       </Link>
 
       <Reveal>
@@ -125,7 +125,7 @@ export default async function IssueDetailPage({
             title="Blocks"
             icon={<SignalIcon className="h-3.5 w-3.5" />}
             issues={blockedBy}
-            emptyText="Nothing depends on this issue."
+            emptyText="Nothing depends on this ticket."
           />
           <div className="glass glow-edge rounded-2xl p-3 text-xs text-[--foreground-subtle] space-y-1">
             <div>

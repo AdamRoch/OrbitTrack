@@ -156,6 +156,13 @@ A row `(blocker=A, blocked=B)` reads "**A blocks B**". The graph is kept a DAG:
 self-edges and cycles are rejected at write time.
 <!-- END:tracker-integration -->
 
+## Vocabulary: tickets in the UI, issues in the code
+
+The UI says **ticket** everywhere (nav, buttons, empty states, headings). Code,
+API routes, DB schema, tests, and identifiers all keep the word **issue** — a
+UI "ticket" *is* an `issue` in the codebase. Don't rename code to match the
+UI; only user-visible strings use "ticket".
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

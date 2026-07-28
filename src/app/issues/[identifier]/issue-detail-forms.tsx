@@ -229,7 +229,7 @@ export function IssueDetailForms({
             <input type="hidden" name="projectKey" value={projectKey} />
             <Input
               name="blockerId"
-              placeholder={`${projectKey}-42 or issue id`}
+              placeholder={`${projectKey}-42 or ticket id`}
               autoFocus
               className="h-9 text-sm"
             />
@@ -265,7 +265,7 @@ export function IssueDetailForms({
 
       {blockedBy.length > 0 && (
         <section>
-          <h2 className="eyebrow mb-3">This issue blocks</h2>
+          <h2 className="eyebrow mb-3">This ticket blocks</h2>
           <ul className="space-y-1.5">
             {blockedBy.map((b) => (
               <li key={b.id}>
@@ -325,7 +325,7 @@ function DeleteButton({
   return (
     <form action={dispatch} className="inline-flex items-center gap-2">
       <input type="hidden" name="projectKey" value={projectKey} />
-      <span className="text-xs text-[--foreground-muted]">Delete this issue?</span>
+      <span className="text-xs text-[--foreground-muted]">Delete this ticket?</span>
       <Button variant="danger" size="sm" type="submit">
         <Check size={13} />
         Confirm

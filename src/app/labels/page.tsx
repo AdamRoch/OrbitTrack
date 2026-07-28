@@ -29,7 +29,7 @@ export default async function LabelsPage() {
         className="inline-flex items-center gap-1 text-xs text-[--foreground-muted] hover:text-[--foreground] mb-4 transition-colors"
       >
         <span className="rotate-180">→</span>
-        Back to issues
+        Back to tickets
       </Link>
       <Reveal>
         <span className="eyebrow">

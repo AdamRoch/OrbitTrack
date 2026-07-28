@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 import { UfoIcon, AlienIcon, RadarIcon, StarIcon, CometIcon } from "@/components/icons";
 
 const LINKS = [
-  { href: "/", label: "Issues", Icon: StarIcon },
+  { href: "/", label: "Tickets", Icon: StarIcon },
   { href: "/map", label: "Map", Icon: RadarIcon },
   { href: "/frontier", label: "Frontier", Icon: CometIcon },
   { href: "/labels", label: "Labels", Icon: AlienIcon },
@@ -132,7 +132,7 @@ export function SiteNav() {
           )}
           style={{ transitionDelay: open ? `${100 + LINKS.length * 70}ms` : "0ms" }}
         >
-          New issue
+          New ticket
           <CometIcon className="h-4 w-4" />
         </Link>
       </div>

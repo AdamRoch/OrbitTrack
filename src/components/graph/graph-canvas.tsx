@@ -131,7 +131,7 @@ function GraphToolbar({
           Dependency graph
         </div>
         <div className="mt-1 flex items-center gap-3 text-[--foreground-muted]">
-          <span>{nodeCount} issues</span>
+          <span>{nodeCount} tickets</span>
           <span className="text-[--border-strong]">·</span>
           <span>{edgeCount} edges</span>
           <span className="text-[--border-strong]">·</span>

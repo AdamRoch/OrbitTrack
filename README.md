@@ -239,6 +239,11 @@ npm test          # run once
 npm run test:watch
 ```
 
+Stop any running dev server first (`npm run dev`): Next.js 16 allows only one
+dev server per project directory, and each test file boots its own — a running
+dev server makes every harness boot time out ("Next dev server did not become
+ready").
+
 The tests cover: frontier cases, cycle/self-edge prevention, claim
 transitions, identifier assignment (no reuse after delete), label cascade,
 CRUD, filtering, the canonical error shape, multi-project scoping (per-project
