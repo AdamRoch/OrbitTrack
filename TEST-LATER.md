@@ -44,5 +44,14 @@ Run `npm test` with no dev server running when convenient.
 
 ## Older uncommitted batch (ticket rename + create-project popover)
 
-Also still unverified by a full suite run: the issue→ticket copy rename, the
-create-project popover, and the always-rendered project switcher.
+Also still unverified by a full suite run: the issue→ticket copy rename and
+the always-rendered project switcher.
+
+The create-project popover had a real bug (fixed 2026-07-28): it rendered a
+`<form>` inside the new-ticket `<form>` on /new — invalid nested forms, so in
+real browsers Create could swallow the submission and the project never
+appeared in the picker. The popover is now a plain panel (click/Enter
+handlers, no `<form>`), covered by `tests/new-issue-form.test.tsx` (jsdom).
+Worth one manual browser pass: /new → picker → "+ New project…" → create via
+both the Create button and Enter → confirm the project is appended + selected.
+
