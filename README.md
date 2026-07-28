@@ -211,9 +211,9 @@ kept a DAG: self-edges and cycles are rejected at write time with `400`.
 
 ## UI
 
-- **`/`** — issue list with status/priority/label filters and a project
-  switcher; the list, frontier, and map pages are all scoped to the active
-  project.
+- **`/`** — ticket list, defaulting to To Do with a toggle button for the In
+  Progress view, plus priority/label filters and a project switcher; the
+  list, frontier, and map pages are all scoped to the active project.
 - **`/frontier`** — the frontier (what's grabbable right now).
 - **`/map`** — the active project's dependency graph.
 - **`/issues/:identifier`** — full detail: rendered markdown, edit form,

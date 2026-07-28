@@ -3,12 +3,16 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import type { IssueStatus, Priority } from "@/lib/db/schema";
 import type { LabelDTO } from "@/lib/types";
-import { STATUS_OPTIONS, PRIORITY_OPTIONS } from "./issue-display";
+import { PRIORITY_OPTIONS } from "./issue-display";
 
 /**
- * Filter bar for the issue list. A small client component so selects can
+ * Filter bar for the ticket list. A small client component so controls can
  * auto-navigate on change (preserving sibling filters). Each change rewrites
  * the URL query params, which re-renders the server component list.
+ *
+ * There is no status select: the list defaults to To Do and a single toggle
+ * button swaps in the In Progress view (and back). Priority and label stay
+ * selects.
  */
 export function FilterBar({
   labels,
@@ -19,7 +23,8 @@ export function FilterBar({
 }) {
   const router = useRouter();
   const params = useSearchParams();
-  const hasFilters = Boolean(current.status || current.priority || current.label);
+  const hasFilters = Boolean(current.priority || current.label);
+  const viewingInProgress = current.status === "in_progress";
 
   const navigate = (overrides: Record<string, string | undefined>) => {
     const next = new URLSearchParams(params.toString());
@@ -37,19 +42,16 @@ export function FilterBar({
   return (
     <div className="glass glow-edge flex flex-wrap items-end gap-3 mb-5 rounded-2xl p-3">
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-[--foreground-muted]">Status</label>
-        <select
+        <label className="text-xs text-[--foreground-muted]">View</label>
+        <button
+          type="button"
+          onClick={() =>
+            navigate({ status: viewingInProgress ? undefined : "in_progress" })
+          }
           className={selectClass}
-          value={current.status ?? ""}
-          onChange={(e) => navigate({ status: e.target.value || undefined })}
         >
-          <option value="">Any</option>
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          {viewingInProgress ? "To do" : "In progress"}
+        </button>
       </div>
 
       <div className="flex flex-col gap-1">

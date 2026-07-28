@@ -10,10 +10,11 @@ import { CometIcon, StarIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 
 /**
- * List view (/). Table of all issues with filter controls driven by query
- * params (status, priority, label) and a project switcher driven by
- * ?project=KEY. The list itself is fully server-rendered; only the filter
- * selects and the project switcher are tiny client islands.
+ * List view (/). Tickets default to the To Do state; a toggle button in the
+ * filter bar swaps in the In Progress ones (?status=in_progress). Priority
+ * and label filters are driven by query params too, and the project switcher
+ * by ?project=KEY. The list itself is fully server-rendered; only the filter
+ * controls and the project switcher are tiny client islands.
  */
 export default async function IssuesPage({
   searchParams,
@@ -30,7 +31,10 @@ export default async function IssuesPage({
 
   const labels = listLabels(db);
 
-  const status = typeof sp.status === "string" ? (sp.status as IssueStatus) : undefined;
+  // Default view is the To Do list; ?status= overrides (the filter bar's
+  // toggle only ever sets in_progress, but any status stays URL-addressable).
+  const statusParam = typeof sp.status === "string" ? (sp.status as IssueStatus) : undefined;
+  const status = statusParam ?? "todo";
   const priorityRaw = typeof sp.priority === "string" ? sp.priority : undefined;
   const priority =
     priorityRaw !== undefined && /^\d+$/.test(priorityRaw)
@@ -41,7 +45,9 @@ export default async function IssuesPage({
   const issues = project
     ? listIssues(db, project, { status, priority, label })
     : [];
-  const hasFilters = Boolean(status || priorityRaw || label);
+  const hasFilters = Boolean(
+    priorityRaw || label || (statusParam && statusParam !== "todo"),
+  );
 
   return (
     <div>

@@ -19,13 +19,33 @@ describe("UI smoke", () => {
     expect(html).toMatch(/OrbitTrack/);
     expect(html).toMatch(/Tickets/);
     expect(html).toMatch(/New/);
-    // Filter controls present.
-    expect(html).toMatch(/name="status"|Status/);
+    // Filter controls present: the in-progress toggle plus priority/label.
+    expect(html).toMatch(/>In progress<\/button>/);
     // The seeded label appears as a filter option.
     expect(html).toMatch(/smoke-label/);
     // Project switcher always renders, even with a single project (ORBT-2).
     expect(html).toMatch(/>Project<\/label>/);
     expect(html).toMatch(/aria-label="New project"/);
+  });
+
+  it("list page defaults to todo tickets and toggles to in progress", async () => {
+    await api.createIssue({ title: "Smoke todo only" });
+    const wip = await api.createIssue({ title: "Smoke wip only" });
+    expect(wip.status).toBe(201);
+    const claimed = await api.claim(wip.body.identifier);
+    expect(claimed.status).toBe(200);
+
+    // Default view: To Do only.
+    const def = await api.fetch("/");
+    const defHtml = await def.text();
+    expect(defHtml).toMatch(/Smoke todo only/);
+    expect(defHtml).not.toMatch(/Smoke wip only/);
+
+    // ?status=in_progress (what the toggle button navigates to): the reverse.
+    const prog = await api.fetch("/?status=in_progress");
+    const progHtml = await prog.text();
+    expect(progHtml).toMatch(/Smoke wip only/);
+    expect(progHtml).not.toMatch(/Smoke todo only/);
   });
 
   it("project switcher lists a newly created project", async () => {
