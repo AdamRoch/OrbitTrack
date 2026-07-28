@@ -3,16 +3,17 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import type { IssueStatus, Priority } from "@/lib/db/schema";
 import type { LabelDTO } from "@/lib/types";
-import { PRIORITY_OPTIONS } from "./issue-display";
+import { STATUS_OPTIONS, PRIORITY_OPTIONS } from "./issue-display";
 
 /**
  * Filter bar for the ticket list. A small client component so controls can
  * auto-navigate on change (preserving sibling filters). Each change rewrites
  * the URL query params, which re-renders the server component list.
  *
- * There is no status select: the list defaults to To Do and a single toggle
- * button swaps in the In Progress view (and back). Priority and label stay
- * selects.
+ * Status gets two controls writing the same `status` param: a quick toggle
+ * button for the common To Do (default) ↔ In Progress swap, and a full
+ * dropdown for every status plus "Any" (?status=all). Picking To Do in the
+ * dropdown clears the param — To Do is the default, so the URL stays clean.
  */
 export function FilterBar({
   labels,
@@ -23,7 +24,11 @@ export function FilterBar({
 }) {
   const router = useRouter();
   const params = useSearchParams();
-  const hasFilters = Boolean(current.priority || current.label);
+  const hasFilters = Boolean(
+    current.priority ||
+      current.label ||
+      (current.status && current.status !== "todo"),
+  );
   const viewingInProgress = current.status === "in_progress";
 
   const navigate = (overrides: Record<string, string | undefined>) => {
@@ -52,6 +57,25 @@ export function FilterBar({
         >
           {viewingInProgress ? "To do" : "In progress"}
         </button>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-[--foreground-muted]">Status</label>
+        <select
+          className={selectClass}
+          value={current.status ?? "all"}
+          onChange={(e) => {
+            const v = e.target.value;
+            navigate({ status: v === "todo" ? undefined : v });
+          }}
+        >
+          <option value="all">Any</option>
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex flex-col gap-1">

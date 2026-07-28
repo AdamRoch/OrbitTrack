@@ -19,8 +19,10 @@ describe("UI smoke", () => {
     expect(html).toMatch(/OrbitTrack/);
     expect(html).toMatch(/Tickets/);
     expect(html).toMatch(/New/);
-    // Filter controls present: the in-progress toggle plus priority/label.
+    // Filter controls present: the in-progress toggle plus the status
+    // dropdown and priority/label selects.
     expect(html).toMatch(/>In progress<\/button>/);
+    expect(html).toMatch(/>Status<\/label>/);
     // The seeded label appears as a filter option.
     expect(html).toMatch(/smoke-label/);
     // Project switcher always renders, even with a single project (ORBT-2).
@@ -46,6 +48,12 @@ describe("UI smoke", () => {
     const progHtml = await prog.text();
     expect(progHtml).toMatch(/Smoke wip only/);
     expect(progHtml).not.toMatch(/Smoke todo only/);
+
+    // ?status=all (the dropdown's "Any"): no status filter, both show.
+    const all = await api.fetch("/?status=all");
+    const allHtml = await all.text();
+    expect(allHtml).toMatch(/Smoke wip only/);
+    expect(allHtml).toMatch(/Smoke todo only/);
   });
 
   it("project switcher lists a newly created project", async () => {

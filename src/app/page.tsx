@@ -10,8 +10,9 @@ import { CometIcon, StarIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 
 /**
- * List view (/). Tickets default to the To Do state; a toggle button in the
- * filter bar swaps in the In Progress ones (?status=in_progress). Priority
+ * List view (/). Tickets default to the To Do state; the filter bar has a
+ * quick toggle button for the In Progress view (?status=in_progress) plus a
+ * full status dropdown — every status, or "Any" via ?status=all. Priority
  * and label filters are driven by query params too, and the project switcher
  * by ?project=KEY. The list itself is fully server-rendered; only the filter
  * controls and the project switcher are tiny client islands.
@@ -31,10 +32,13 @@ export default async function IssuesPage({
 
   const labels = listLabels(db);
 
-  // Default view is the To Do list; ?status= overrides (the filter bar's
-  // toggle only ever sets in_progress, but any status stays URL-addressable).
-  const statusParam = typeof sp.status === "string" ? (sp.status as IssueStatus) : undefined;
-  const status = statusParam ?? "todo";
+  // Default view is the To Do list; ?status= overrides with any status, and
+  // ?status=all (the dropdown's "Any") means no status filter at all.
+  const statusParam = typeof sp.status === "string" ? sp.status : undefined;
+  const status =
+    statusParam === "all"
+      ? undefined
+      : ((statusParam ?? "todo") as IssueStatus);
   const priorityRaw = typeof sp.priority === "string" ? sp.priority : undefined;
   const priority =
     priorityRaw !== undefined && /^\d+$/.test(priorityRaw)
