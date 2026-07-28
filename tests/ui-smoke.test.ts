@@ -19,9 +19,9 @@ describe("UI smoke", () => {
     expect(html).toMatch(/OrbitTrack/);
     expect(html).toMatch(/Tickets/);
     expect(html).toMatch(/New/);
-    // Filter controls present: the in-progress toggle plus the status
-    // dropdown and priority/label selects.
-    expect(html).toMatch(/>In progress<\/button>/);
+    // Filter controls present: the status dropdown (with hover quick picks
+    // for To do / In progress) plus priority/label selects.
+    expect(html).toMatch(/In progress/);
     expect(html).toMatch(/>Status<\/label>/);
     // The seeded label appears as a filter option.
     expect(html).toMatch(/smoke-label/);

@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import type { IssueStatus, Priority } from "@/lib/db/schema";
 import type { LabelDTO } from "@/lib/types";
+import { cn } from "@/lib/cn";
 import { STATUS_OPTIONS, PRIORITY_OPTIONS } from "./issue-display";
 
 /**
@@ -10,10 +11,11 @@ import { STATUS_OPTIONS, PRIORITY_OPTIONS } from "./issue-display";
  * auto-navigate on change (preserving sibling filters). Each change rewrites
  * the URL query params, which re-renders the server component list.
  *
- * Status gets two controls writing the same `status` param: a quick toggle
- * button for the common To Do (default) ↔ In Progress swap, and a full
- * dropdown for every status plus "Any" (?status=all). Picking To Do in the
- * dropdown clears the param — To Do is the default, so the URL stays clean.
+ * Status is one control: a dropdown with every status plus "Any"
+ * (?status=all). Hovering (or keyboard-focusing) the dropdown reveals the
+ * two most common picks — To Do (the default, clears the param) and In
+ * Progress — as quick buttons floating beneath it, so the bar stays quiet
+ * until you reach for it.
  */
 export function FilterBar({
   labels,
@@ -29,7 +31,6 @@ export function FilterBar({
       current.label ||
       (current.status && current.status !== "todo"),
   );
-  const viewingInProgress = current.status === "in_progress";
 
   const navigate = (overrides: Record<string, string | undefined>) => {
     const next = new URLSearchParams(params.toString());
@@ -44,22 +45,17 @@ export function FilterBar({
   const selectClass =
     "h-9 rounded-full border border-[--border] bg-[--surface-2]/70 px-3 text-sm text-[--foreground] backdrop-blur-sm focus:outline-none focus:border-[--accent] cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]";
 
+  const quickClass = (active: boolean) =>
+    cn(
+      "h-7 rounded-full border px-2.5 text-xs backdrop-blur-sm cursor-pointer transition-colors",
+      active
+        ? "border-[--accent] bg-[--surface-2]/90 text-[--foreground]"
+        : "border-[--border] bg-[--surface-2]/90 text-[--foreground-muted] hover:text-[--foreground] hover:border-[--accent]",
+    );
+
   return (
     <div className="glass glow-edge flex flex-wrap items-end gap-3 mb-5 rounded-2xl p-3">
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-[--foreground-muted]">View</label>
-        <button
-          type="button"
-          onClick={() =>
-            navigate({ status: viewingInProgress ? undefined : "in_progress" })
-          }
-          className={selectClass}
-        >
-          {viewingInProgress ? "To do" : "In progress"}
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-1">
+      <div className="group relative flex flex-col gap-1">
         <label className="text-xs text-[--foreground-muted]">Status</label>
         <select
           className={selectClass}
@@ -76,6 +72,26 @@ export function FilterBar({
             </option>
           ))}
         </select>
+
+        {/* Quick picks for the two most common statuses. Hidden until the
+            control is hovered or focused (focus-within keeps it keyboard-
+            accessible); absolutely positioned so nothing reflows. */}
+        <div className="invisible absolute left-0 top-full z-10 mt-1 flex gap-1 opacity-0 transition-all duration-200 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+          <button
+            type="button"
+            onClick={() => navigate({ status: undefined })}
+            className={quickClass(current.status === "todo")}
+          >
+            To do
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate({ status: "in_progress" })}
+            className={quickClass(current.status === "in_progress")}
+          >
+            In progress
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1">
