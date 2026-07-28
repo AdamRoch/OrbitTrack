@@ -107,7 +107,7 @@ export function NewIssueForm({
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Status">
-          <Select name="status" defaultValue="backlog">
+          <Select name="status" defaultValue="todo">
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -117,7 +117,7 @@ export function NewIssueForm({
         </Field>
 
         <Field label="Priority">
-          <Select name="priority" defaultValue="0">
+          <Select name="priority" defaultValue="2">
             {PRIORITY_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}

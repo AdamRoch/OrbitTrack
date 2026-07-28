@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Badge } from "./ui/badge";
+import { CheckIcon } from "./icons";
+import { cn } from "@/lib/cn";
 import type { IssueDTO, LabelDTO } from "@/lib/types";
 import type { IssueStatus, Priority } from "@/lib/db/schema";
 import { priorityLabels } from "@/lib/db/schema";
@@ -93,13 +95,56 @@ export function LabelChips({ labels }: { labels: LabelDTO[] }) {
   );
 }
 
+/**
+ * Per-status row treatment for the list page's mixed-status views (e.g.
+ * ?status=all), where rows of every status sit side by side and need to be
+ * scannable at a glance. Off by default — the frontier view is all-todo, so
+ * tinting would be noise there. Distinct from STATUS_META's badge palette:
+ * this is deliberately a green family (todo → done) per product call.
+ */
+const ROW_STATUS_STYLE: Record<
+  IssueStatus,
+  { row: string; glyph?: "check" | "spinner" }
+> = {
+  todo: { row: "border-l-[#4cb782] bg-[#4cb782]/[0.06]" },
+  in_progress: {
+    row: "border-l-[#5e6ad2] bg-[#5e6ad2]/[0.06]",
+    glyph: "spinner",
+  },
+  done: { row: "border-l-[#2f8f66] bg-[#2f8f66]/[0.10]", glyph: "check" },
+  backlog: { row: "border-l-[#6c7a6e]/50 bg-[#6c7a6e]/[0.05] opacity-75" },
+  canceled: { row: "opacity-55" },
+};
+
 /** A single row in a list of issues (used by list + frontier views). */
-export function IssueRow({ issue }: { issue: IssueDTO }) {
+export function IssueRow({
+  issue,
+  statusStyle = false,
+}: {
+  issue: IssueDTO;
+  /** Tint + glyph the row by status (see ROW_STATUS_STYLE). */
+  statusStyle?: boolean;
+}) {
+  const style = statusStyle ? ROW_STATUS_STYLE[issue.status] : undefined;
   return (
     <Link
       href={`/issues/${issue.identifier}`}
-      className="group flex items-center gap-3 rounded-xl border border-[--border] bg-[--surface]/60 px-4 py-3 backdrop-blur-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_55%,transparent)] hover:bg-[--surface-hover]/80 hover:shadow-[0_14px_34px_-22px_rgba(var(--glow),0.55),0_0_0_1px_color-mix(in_srgb,var(--accent)_35%,transparent),0_0_22px_-6px_rgba(var(--glow),0.6)]"
+      className={cn(
+        "group flex items-center gap-3 rounded-xl border border-[--border] bg-[--surface]/60 px-4 py-3 backdrop-blur-sm transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_55%,transparent)] hover:bg-[--surface-hover]/80 hover:shadow-[0_14px_34px_-22px_rgba(var(--glow),0.55),0_0_0_1px_color-mix(in_srgb,var(--accent)_35%,transparent),0_0_22px_-6px_rgba(var(--glow),0.6)]",
+        style && "border-l-2",
+        style?.row,
+      )}
     >
+      {style && (
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+          {style.glyph === "check" && (
+            <CheckIcon className="h-3.5 w-3.5 text-[#4cb782]" />
+          )}
+          {style.glyph === "spinner" && (
+            <span className="h-3 w-3 animate-spin rounded-full border border-[#5e6ad2]/40 border-t-[#5e6ad2]" />
+          )}
+        </span>
+      )}
       <span className="font-mono text-xs text-[--foreground-subtle] w-20 shrink-0">
         {issue.identifier}
       </span>

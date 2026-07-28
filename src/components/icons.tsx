@@ -57,6 +57,14 @@ export function CometIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function CheckIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
 export function SignalIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base} {...props}>

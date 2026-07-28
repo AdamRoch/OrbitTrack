@@ -216,7 +216,10 @@ kept a DAG: self-edges and cycles are rejected at write time with `400`.
   picks; priority/label filters and a project switcher round out the bar.
   Single-key status shortcuts work anywhere on the page (not while typing in
   a field): `a` any, `t` to do, `i` in progress, `d` done, `b` backlog,
-  `c` canceled — discoverable via the `?` chip in the filter bar. The list,
+  `c` canceled — discoverable via the `?` chip in the filter bar. In the
+  mixed-status view (`?status=all`) rows are color-coded: To Do green,
+  Done darker green with a check mark, In Progress indigo with a spinner,
+  Backlog faded grey-green, Canceled faded. The list,
   frontier, and map pages are all scoped to the active project.
 - **`/frontier`** — the frontier (what's grabbable right now).
 - **`/map`** — the active project's dependency graph.
@@ -224,7 +227,7 @@ kept a DAG: self-edges and cycles are rejected at write time with `400`.
   status/priority/label controls, blocker + blocked-by lists with add/remove,
   and a read-only **Agent Q&A** transcript (open questions show as pending,
   answered ones as resolved — asking/answering are API-only).
-- **`/new`** — create form.
+- **`/new`** — create form (defaults: status To Do, priority Medium).
 - **`/labels`** — label CRUD.
 
 The UI uses server actions (not the REST API) for mutations, but both go through

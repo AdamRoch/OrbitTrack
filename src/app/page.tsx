@@ -98,7 +98,9 @@ export default async function IssuesPage({
               <EmptyState hasFilters={hasFilters} />
             ) : (
               issues.map((issue) => (
-                <IssueRow key={issue.id} issue={issue} />
+                // Mixed-status view (?status=all) gets the per-status row
+                // tint/glyph; a single-status filter makes it redundant.
+                <IssueRow key={issue.id} issue={issue} statusStyle={status === undefined} />
               ))
             )}
           </div>

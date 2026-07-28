@@ -21,6 +21,11 @@ Run `npm test` with no dev server running when convenient.
   - Quick picks appear on hover AND on keyboard focus of the select.
   - The active quick pick is highlighted (To do highlighted by default).
   - The floating panel isn't clipped by the `.glass` filter bar (overflow).
+  - ~~Tooltip hidden behind the ticket list~~ — fixed 2026-07-28: the bar
+    now has `relative z-20` (backdrop-filter on `.glass` creates a stacking
+    context at z-auto, so inner z-10 lost to later `.ticket-panel`s in DOM
+    order). Verify both the quick picks and the `?` cheat sheet paint ABOVE
+    the first ticket card.
   - Dropdown "Any" → `?status=all`; picking To Do clears the param.
   - "Clear" appears for priority/label filters or a non-default status, and
     resets to the default todo view.
@@ -42,7 +47,23 @@ Run `npm test` with no dev server running when convenient.
 - Manual UI pass: button and dropdown pills align ("View" / "Status" labels),
   no layout shift.
 
-## Older uncommitted batch (ticket rename + create-project popover)
+## New-ticket defaults + row status colors (2026-07-28)
+
+- `src/app/new/new-issue-form.tsx` — Status default backlog → **todo**,
+  Priority default 0 → **2 (Medium)**. Form-only; API defaults (omitted
+  status/priority → backlog/0) are unchanged and still tested. Manual check:
+  open /new, confirm both selects preselect To Do / Medium, create a ticket
+  without touching them.
+- `src/components/issue-display.tsx` — `IssueRow` gained a `statusStyle`
+  prop (ROW_STATUS_STYLE). `/` passes it only for the mixed view
+  (`?status=all`); `/frontier` is untouched. Manual check on `/?status=all`:
+  - To Do rows: green left edge + faint green tint.
+  - Done rows: darker green + check glyph before the identifier.
+  - In Progress rows: indigo tint + small spinning glyph (and it animates).
+  - Backlog: faded grey-green, slightly dimmed. Canceled: dimmed, no tint.
+  - Filtered views (e.g. default To Do) show NO tint; frontier unchanged.
+  - New `CheckIcon` in `src/components/icons.tsx`.
+- Typecheck + eslint clean; full suite still pending (see header).
 
 Also still unverified by a full suite run: the issue→ticket copy rename and
 the always-rendered project switcher.

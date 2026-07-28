@@ -97,7 +97,13 @@ export function FilterBar({
     );
 
   return (
-    <div className="glass glow-edge flex flex-wrap items-end gap-3 mb-5 rounded-2xl p-3">
+    // NOTE: relative z-20 lifts the whole bar's stacking context above the
+    // ticket list below. Without it, the floating quick picks / cheat sheet
+    // (which extend past the bar's bottom edge) paint UNDER the list:
+    // .glass sets backdrop-filter, which creates a stacking context at
+    // z-index auto, so inner z-10 can't beat later `position: relative`
+    // panels (.ticket-panel) in DOM order.
+    <div className="glass glow-edge relative z-20 flex flex-wrap items-end gap-3 mb-5 rounded-2xl p-3">
       <div className="group relative flex flex-col gap-1">
         <label className="text-xs text-[--foreground-muted]">Status</label>
         <select
