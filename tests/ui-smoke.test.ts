@@ -23,6 +23,9 @@ describe("UI smoke", () => {
     // for To do / In progress) plus priority/label selects.
     expect(html).toMatch(/In progress/);
     expect(html).toMatch(/>Status<\/label>/);
+    // Keyboard-shortcut cheat sheet is rendered.
+    expect(html).toMatch(/Status shortcuts/);
+    expect(html).toMatch(/aria-label="Keyboard shortcuts"/);
     // The seeded label appears as a filter option.
     expect(html).toMatch(/smoke-label/);
     // Project switcher always renders, even with a single project (ORBT-2).

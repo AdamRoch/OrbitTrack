@@ -26,6 +26,16 @@ Run `npm test` with no dev server running when convenient.
     resets to the default todo view.
   - Touch device: no hover — quick picks unreachable, but the select alone
     must still be fully usable.
+- Keyboard shortcuts (single keys, no modifiers) on `/` only:
+  - `a` → ?status=all, `t` → default To Do, `i` → in_progress, `d` → done,
+    `b` → backlog, `c` → canceled.
+  - Ignored while focus is in an input/textarea/select/contenteditable, and
+    when Ctrl/Cmd/Alt is held (browser + OS shortcuts untouched).
+  - Discoverability: `?` chip at the right of the filter bar opens a cheat
+    sheet on hover/focus; quick picks show their key (`t`, `i`).
+  - Manual check: shortcuts navigate and preserve sibling params; typing in
+    the new-ticket form is unaffected (FilterBar doesn't render there, but
+    verify the guard anyway by focusing the label select and pressing keys).
 - `tests/ui-smoke.test.ts` — the toggle/default-view test (incl. `?status=all`)
   and the updated filter-control assertions have never been run; confirm they
   pass.

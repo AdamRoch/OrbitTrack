@@ -214,7 +214,10 @@ kept a DAG: self-edges and cycles are rejected at write time with `400`.
 - **`/`** — ticket list, defaulting to To Do. The status dropdown covers
   every status plus "Any", and hovering it reveals To Do / In Progress quick
   picks; priority/label filters and a project switcher round out the bar.
-  The list, frontier, and map pages are all scoped to the active project.
+  Single-key status shortcuts work anywhere on the page (not while typing in
+  a field): `a` any, `t` to do, `i` in progress, `d` done, `b` backlog,
+  `c` canceled — discoverable via the `?` chip in the filter bar. The list,
+  frontier, and map pages are all scoped to the active project.
 - **`/frontier`** — the frontier (what's grabbable right now).
 - **`/map`** — the active project's dependency graph.
 - **`/issues/:identifier`** — full detail: rendered markdown, edit form,
