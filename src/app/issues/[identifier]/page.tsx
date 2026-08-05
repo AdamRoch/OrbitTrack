@@ -13,6 +13,7 @@ import { IssueDetailForms } from "./issue-detail-forms";
 import { AlienIcon, RadarIcon, SignalIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { QATranscript } from "@/components/qa-transcript";
+import { LiveRefresh } from "@/components/live-refresh";
 
 /**
  * Detail view (/issues/:identifier). Full title, rendered markdown, status &
@@ -51,6 +52,7 @@ export default async function IssueDetailPage({
 
   return (
     <div className="max-w-3xl">
+      <LiveRefresh />
       <Link
         href={backHref}
         className="inline-flex items-center gap-1 text-xs text-[--foreground-muted] hover:text-[--foreground] mb-4 transition-colors"

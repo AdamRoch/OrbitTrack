@@ -7,6 +7,7 @@ import { CometIcon } from "@/components/icons";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/reveal";
+import { LiveRefresh } from "@/components/live-refresh";
 
 // The graph reflects live issue data, so render it on every request rather
 // than caching a build-time snapshot.
@@ -48,6 +49,7 @@ export default async function MapPage({
 
   return (
     <div>
+      <LiveRefresh />
       <Reveal>
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>

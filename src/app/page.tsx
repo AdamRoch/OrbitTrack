@@ -8,6 +8,7 @@ import type { IssueStatus, Priority } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
 import { CometIcon, StarIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
+import { LiveRefresh } from "@/components/live-refresh";
 
 /**
  * List view (/). Tickets default to the To Do state; the filter bar has a
@@ -58,6 +59,7 @@ export default async function IssuesPage({
 
   return (
     <div>
+      <LiveRefresh />
       <Reveal>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-5">
           <div>

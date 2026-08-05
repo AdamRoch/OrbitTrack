@@ -4,6 +4,7 @@ import { IssueRow } from "@/components/issue-display";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { CometIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
+import { LiveRefresh } from "@/components/live-refresh";
 
 /**
  * Frontier view (/frontier). The set of `todo` issues whose every blocker is
@@ -28,6 +29,7 @@ export default async function FrontierPage({
 
   return (
     <div>
+      <LiveRefresh />
       <Reveal>
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>

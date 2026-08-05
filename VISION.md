@@ -134,6 +134,14 @@ Inter-harness is the defining use case, not the only one. Two agents in the
 same harness can collaborate the same way. The design does not assume
 inter-harness; it enables it.
 
+UI freshness and agent waiting are separate concerns. The watchable browser
+views use short, visibility-aware `router.refresh()` polling because OrbitTrack
+is a single-user local app and that gives immediate feedback with no new
+infrastructure. Agents waiting for Q&A answers still poll the API. If that API
+polling becomes too slow or wasteful, server-sent events or long polling are the
+deferred path; the browser refresh loop should not become the coordination
+transport.
+
 ### Work queues and the overnight autonomy pattern
 
 The work skills (`/work-independently`, `/work-with-help`) accept ticket
