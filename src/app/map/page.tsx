@@ -1,5 +1,5 @@
 import { listIssues, listProjects } from "@/lib/domain";
-import { getServerDb, getServerProject } from "@/lib/server-data";
+import { getServerDb, getActiveProject } from "@/lib/server-data";
 import { GraphCanvas } from "@/components/graph/graph-canvas";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import type { GraphIssue } from "@/lib/graph-layout";
@@ -32,7 +32,7 @@ export default async function MapPage({
   const projects = listProjects(db);
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
-  const project = getServerProject(db, projectKey);
+  const project = await getActiveProject(db, projectKey);
 
   const issues = project ? listIssues(db, project) : [];
 

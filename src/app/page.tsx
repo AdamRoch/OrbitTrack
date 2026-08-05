@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listIssues, listLabels, listProjects } from "@/lib/domain";
-import { getServerDb, getServerProject } from "@/lib/server-data";
+import { getServerDb, getActiveProject } from "@/lib/server-data";
 import { IssueRow } from "@/components/issue-display";
 import { FilterBar } from "@/components/filter-bar";
 import { ProjectSwitcher } from "@/components/project-switcher";
@@ -28,7 +28,7 @@ export default async function IssuesPage({
   const projects = listProjects(db);
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
-  const project = getServerProject(db, projectKey);
+  const project = await getActiveProject(db, projectKey);
 
   const labels = listLabels(db);
 

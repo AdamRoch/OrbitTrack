@@ -220,7 +220,10 @@ kept a DAG: self-edges and cycles are rejected at write time with `400`.
   `c` canceled — discoverable via the `?` chip in the filter bar. In the
   mixed-status view (`?status=all`) rows are color-coded: To Do green,
   Done darker green with a check mark, In Progress indigo with a spinner,
-  Backlog faded grey-green, Canceled faded. The list,
+  Backlog faded grey-green, Canceled faded. Project scope is sticky: the
+  active project is stored in an `ot_project` cookie (written by the switcher
+  and by any mutation under an explicit project), so param-less navigation
+  keeps the last-used project; an explicit `?project=` always wins. The list,
   frontier, and map pages are all scoped to the active project.
 - **`/frontier`** — the frontier (what's grabbable right now).
 - **`/map`** — the active project's dependency graph.

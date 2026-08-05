@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getIssue, getBlockers, getBlockedBy, listLabels } from "@/lib/domain";
-import { getServerDb, getServerProject } from "@/lib/server-data";
+import { getServerDb, getActiveProject } from "@/lib/server-data";
 import { renderMarkdown } from "@/lib/markdown";
 import {
   BlockedBadge,
@@ -35,7 +35,7 @@ export default async function IssueDetailPage({
 
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
-  const project = getServerProject(db, projectKey);
+  const project = await getActiveProject(db, projectKey);
   if (!project) notFound();
 
   const issue = getIssue(db, project, identifier);

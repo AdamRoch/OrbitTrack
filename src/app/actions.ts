@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   createIssue,
@@ -27,6 +28,7 @@ import {
   parseLabelName,
 } from "@/lib/validate";
 import type { ProjectRow } from "@/lib/db/schema";
+import { ACTIVE_PROJECT_COOKIE } from "@/lib/config";
 
 /**
  * Server actions — the UI's mutation seam. They go through the same domain
@@ -64,10 +66,10 @@ function isRedirectError(e: unknown): boolean {
 }
 
 /** Resolve the active project from a form-submitted key (or default). */
-function resolveProject(projectKey: string | undefined): {
+async function resolveProject(projectKey: string | undefined): Promise<{
   db: ReturnType<typeof getServerDb>;
   project: ProjectRow;
-} {
+}> {
   const db = getServerDb();
   const project = getServerProject(db, projectKey);
   if (!project) {
@@ -77,6 +79,15 @@ function resolveProject(projectKey: string | undefined): {
         : "no projects exist",
       "project_not_found",
     );
+  }
+  // Mutating under an explicit project makes it the sticky scope (the write
+  // path for ACTIVE_PROJECT_COOKIE; the switcher writes it client-side).
+  if (projectKey?.trim()) {
+    (await cookies()).set(ACTIVE_PROJECT_COOKIE, project.key, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
   }
   return { db, project };
 }
@@ -91,7 +102,7 @@ export async function createIssueAction(
   let db: ReturnType<typeof getServerDb>;
   let project: ProjectRow;
   try {
-    ({ db, project } = resolveProject(projectKey));
+    ({ db, project } = await resolveProject(projectKey));
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     throw e;
@@ -130,7 +141,7 @@ export async function updateIssueAction(
   let db: ReturnType<typeof getServerDb>;
   let project: ProjectRow;
   try {
-    ({ db, project } = resolveProject(projectKey));
+    ({ db, project } = await resolveProject(projectKey));
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     throw e;
@@ -172,7 +183,7 @@ export async function deleteIssueAction(
   let db: ReturnType<typeof getServerDb>;
   let project: ProjectRow;
   try {
-    ({ db, project } = resolveProject(projectKey));
+    ({ db, project } = await resolveProject(projectKey));
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     throw e;
@@ -193,7 +204,7 @@ export async function claimIssueAction(
   let db: ReturnType<typeof getServerDb>;
   let project: ProjectRow;
   try {
-    ({ db, project } = resolveProject(projectKey));
+    ({ db, project } = await resolveProject(projectKey));
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     throw e;
@@ -223,7 +234,7 @@ export async function setIssueLabelsAction(
   let db: ReturnType<typeof getServerDb>;
   let project: ProjectRow;
   try {
-    ({ db, project } = resolveProject(projectKey));
+    ({ db, project } = await resolveProject(projectKey));
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     throw e;
@@ -253,7 +264,7 @@ export async function addBlockerAction(
   let db: ReturnType<typeof getServerDb>;
   let project: ProjectRow;
   try {
-    ({ db, project } = resolveProject(projectKey));
+    ({ db, project } = await resolveProject(projectKey));
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     throw e;
@@ -284,7 +295,7 @@ export async function removeBlockerAction(
   let db: ReturnType<typeof getServerDb>;
   let project: ProjectRow;
   try {
-    ({ db, project } = resolveProject(projectKey));
+    ({ db, project } = await resolveProject(projectKey));
   } catch (e) {
     if (e instanceof ValidationError) return fail(e.message);
     throw e;

@@ -23,3 +23,11 @@ export const SEED_DEFAULT_LABELS = process.env.TRACKER_SEED !== "false";
  */
 export const SYSTEM_LABEL_NAME = "ready-for-agent";
 export const SYSTEM_LABEL_COLOR = "#22c55e";
+
+/**
+ * Cookie holding the last-active project key — the "sticky project". Set by
+ * the project switcher (client-side) and by every server action that mutates
+ * under an explicit project; read by getActiveProject as the scope fallback
+ * when the URL carries no ?project= param.
+ */
+export const ACTIVE_PROJECT_COOKIE = "ot_project";

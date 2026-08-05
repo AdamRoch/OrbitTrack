@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { ACTIVE_PROJECT_COOKIE } from "@/lib/config";
 import type { ProjectDTO } from "@/lib/types";
 import { CreateProjectPopover } from "@/components/create-project-popover";
 
@@ -31,6 +32,11 @@ export function ProjectSwitcher({
   const [creating, setCreating] = useState(false);
 
   const goTo = (key: string) => {
+    // Persist the choice (sticky project) so scope survives navigation to
+    // param-less URLs; server actions also write this cookie on mutations.
+    document.cookie = key
+      ? `${ACTIVE_PROJECT_COOKIE}=${key}; path=/; max-age=31536000; samesite=lax`
+      : `${ACTIVE_PROJECT_COOKIE}=; path=/; max-age=0`;
     const next = new URLSearchParams(params.toString());
     if (key) next.set("project", key);
     else next.delete("project");

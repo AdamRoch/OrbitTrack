@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listLabels, listProjects } from "@/lib/domain";
-import { getServerDb, getServerProject } from "@/lib/server-data";
+import { getServerDb, getActiveProject } from "@/lib/server-data";
 import { NewIssueForm } from "./new-issue-form";
 import { AlienIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
@@ -26,7 +26,7 @@ export default async function NewIssuePage({
 
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
-  const project = getServerProject(db, projectKey);
+  const project = await getActiveProject(db, projectKey);
 
   return (
     <div className="max-w-2xl">

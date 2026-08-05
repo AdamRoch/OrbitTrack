@@ -1,5 +1,5 @@
 import { getFrontier, listProjects } from "@/lib/domain";
-import { getServerDb, getServerProject } from "@/lib/server-data";
+import { getServerDb, getActiveProject } from "@/lib/server-data";
 import { IssueRow } from "@/components/issue-display";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { CometIcon } from "@/components/icons";
@@ -22,7 +22,7 @@ export default async function FrontierPage({
   const projects = listProjects(db);
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
-  const project = getServerProject(db, projectKey);
+  const project = await getActiveProject(db, projectKey);
 
   const frontier = project ? getFrontier(db, project) : [];
 

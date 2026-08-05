@@ -67,6 +67,28 @@ Run `npm test` with no dev server running when convenient.
   - New `CheckIcon` in `src/components/icons.tsx`.
 - Typecheck + eslint clean; full suite still pending (see header).
 
+## Sticky project scope + lost-ticket audit (2026-07-28)
+
+- AUDIT RESULT: no tickets lost. Live DB shows all 7 tickets from the user's
+  22:18–22:20 manual run (TEST-1..4, OEMR-83..85), numbering contiguous for
+  the run, no dupes (createIssue is a single transaction; better-sqlite3 is
+  synchronous → no number race). Apparent loss = two visibility traps:
+  (1) `/` scoped to the DEFAULT project (OEMR) once the URL lost ?project=;
+  (2) `/` defaults to status=todo, hiding backlog/done/canceled tickets.
+  (Pre-existing OEMR numbering gaps 71→73, 80→83 are consistent with deletes.)
+- Sticky project: `ot_project` cookie (ACTIVE_PROJECT_COOKIE in
+  src/lib/config.ts). Write path: ProjectSwitcher.goTo (client
+  document.cookie) + actions.ts resolveProject (server-action cookie set on
+  any mutation with an explicit projectKey). Read path: getActiveProject in
+  src/lib/server-data.ts (?project= param → cookie → default; stale cookie
+  key falls back to default). All 5 scoped pages (/, /frontier, /map, /new,
+  /issues/[id]) use it. Manual check:
+  - Switch to TEST, navigate to / via logo/nav (no ?project=) → still TEST.
+  - Create a ticket under TEST from /new, then click Home → still TEST.
+  - Explicit ?project=OEMR still wins over the cookie.
+  - New incognito window (no cookie) → default project, unchanged behavior.
+- Typecheck + eslint clean; full suite still pending (see header).
+
 ### Round 2 (same day): visibility + ordering feedback
 
 - ROW_STATUS_STYLE v2 — user found v1 tints barely visible. Now: tint alpha
