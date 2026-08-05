@@ -34,8 +34,11 @@ describe("UI smoke", () => {
   });
 
   it("list page defaults to todo tickets and toggles to in progress", async () => {
-    await api.createIssue({ title: "Smoke todo only" });
-    const wip = await api.createIssue({ title: "Smoke wip only" });
+    await api.createIssue({ title: "Smoke todo only", status: "todo" });
+    const wip = await api.createIssue({
+      title: "Smoke wip only",
+      status: "todo",
+    });
     expect(wip.status).toBe(201);
     const claimed = await api.claim(wip.body.identifier);
     expect(claimed.status).toBe(200);
