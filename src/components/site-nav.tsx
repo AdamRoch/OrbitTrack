@@ -21,12 +21,15 @@ const LINKS = [
  */
 export function SiteNav() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
 
-  // Close the mobile overlay whenever the route changes.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  // Layouts persist across navigation. Keying the stateful subtree by the
+  // current route gives each route a closed menu without an effect-driven
+  // state reset (and also handles browser back/forward navigation).
+  return <RouteSiteNav key={pathname} pathname={pathname} />;
+}
+
+function RouteSiteNav({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
 
   // Lock body scroll while the overlay is open.
   useEffect(() => {
