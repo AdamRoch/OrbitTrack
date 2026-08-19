@@ -128,7 +128,8 @@ Set `RESEND_API_KEY` only in local/deployment secrets and verify
 `orbittrack.adamroch.com` in Resend before production use. Notifications send
 from `OrbitTrack <notifications@orbittrack.adamroch.com>` by default. Each new
 workspace stores one durable outbox record; provider failures are retried with
-the same Resend idempotency key.
+the same Resend idempotency key. Administrators can inspect delivery state at
+`/admin/notifications`; a message that exhausts retries is marked `failed`.
 
 ---
 

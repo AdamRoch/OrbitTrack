@@ -765,6 +765,11 @@ export function revokeAgentToken(ownerId: number, tokenId: number): boolean {
     .run(Date.now(), tokenId, ownerId).changes === 1;
 }
 
+export function listNotificationOutbox(): { id: number; ownerEmail: string; ownerName: string | null; createdAt: number; status: string; attempts: number; deliveredAt: number | null; lastError: string | null }[] {
+  const raw = getRawDb();
+  return raw.prepare("SELECT id, owner_email AS ownerEmail, owner_name AS ownerName, created_at AS createdAt, status, attempts, delivered_at AS deliveredAt, last_error AS lastError FROM notification_outbox ORDER BY id DESC LIMIT 100").all() as { id: number; ownerEmail: string; ownerName: string | null; createdAt: number; status: string; attempts: number; deliveredAt: number | null; lastError: string | null }[];
+}
+
 /** SQLite VACUUM INTO includes committed WAL state, unlike copying the .db file. */
 function backupBeforeTenantMigration(raw: Database.Database, path: string): void {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");

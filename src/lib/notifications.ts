@@ -17,6 +17,10 @@ export async function deliverPendingNotifications(fetcher: typeof fetch = fetch)
       const body = await response.json().catch(() => ({})) as { id?: string };
       db.prepare("UPDATE notification_outbox SET status = 'delivered', delivered_at = ?, provider_id = ?, updated_at = ?, last_error = NULL WHERE id = ?").run(Date.now(), body.id ?? null, Date.now(), row.id);
     } catch {
+      if (row.attempts >= 7) {
+        db.prepare("UPDATE notification_outbox SET status = 'failed', updated_at = ?, last_error = 'provider delivery failed after retries' WHERE id = ?").run(Date.now(), row.id);
+        continue;
+      }
       const delay = Math.min(60 * 60 * 1000, 1000 * 2 ** Math.min(row.attempts, 10));
       db.prepare("UPDATE notification_outbox SET status = 'retry', next_attempt_at = ?, updated_at = ?, last_error = 'provider delivery failed' WHERE id = ?").run(Date.now() + delay, Date.now(), row.id);
     }
