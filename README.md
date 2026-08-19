@@ -88,6 +88,30 @@ snapshot file is written next to the DB first.
 | `TRACKER_PREFIX` | `LIN` | Key of the default project bootstrapped on first run (stored uppercased; a project's key is its identifier prefix). Ignored when migrating a legacy DB that already has issues — their prefix wins (see above). Further projects are created via the API with their own keys. |
 | `TRACKER_SEED` | `true` | Set to `false` to skip seeding default labels. |
 
+### Authentication and workspace isolation
+
+Hosted OrbitTrack requires a configured administrator email, an agent bearer
+token, and a session secret. Browser users authenticate with Google OpenID
+Connect; the initial administrator signs in with the configured email and
+claims the migrated local workspace. Self-service registration is intentionally
+not enabled until ORBT-19.
+
+Agents add `Authorization: Bearer <token>` to every API request. The token is
+bound to one workspace, and every project, label, issue, dependency, and Q&A
+lookup is scoped to that workspace. Never put any of these secrets in a skill,
+script, or committed file; see `.env.example` for variable names only.
+
+Create a Google Web OAuth client with these redirect URIs:
+
+```
+http://localhost:3000/api/auth/callback/google
+https://orbittrack.adamroch.com/api/auth/callback/google
+```
+
+On first startup, the existing SQLite tracker is assigned to the configured
+administrator account. Before that forward-only migration, OrbitTrack creates
+a consistent SQLite backup using `VACUUM INTO`, including committed WAL state.
+
 ---
 
 ## The frontier
@@ -106,10 +130,10 @@ Agents fetch the frontier, pick one, then claim it:
 
 ```bash
 # What can I work on right now?
-curl localhost:3000/api/issues/frontier
+curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/frontier
 
 # Grab one atomically (todo → in_progress).
-curl -X POST localhost:3000/api/issues/LIN-42/claim
+curl -X POST -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/LIN-42/claim
 ```
 
 The frontier is ordered by priority desc, then created asc (a long-waiting
@@ -160,8 +184,8 @@ agent loop stay autonomous instead of stalling on a harness prompt.
 
 ### Labels
 
-Labels are **global across projects** — one triage vocabulary for the whole
-tracker. CRUD lives at `/api/labels` (see [AGENTS.md](AGENTS.md)).
+Labels belong to a workspace and are shared by projects within that workspace.
+CRUD lives at `/api/labels` (see [AGENTS.md](AGENTS.md)).
 
 ### `claim` semantics
 

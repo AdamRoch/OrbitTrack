@@ -62,6 +62,7 @@ describe("legacy DB migration to multi-project schema", () => {
   let base = "";
   let dir = "";
   let dbPath = "";
+  const agentHeaders = { authorization: "Bearer migration-test-token" };
 
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "lc-migrate-"));
@@ -164,6 +165,9 @@ describe("legacy DB migration to multi-project schema", () => {
         TRACKER_DB_PATH: dbPath,
         TRACKER_PREFIX: "LIN",
         TRACKER_SEED: "false",
+        ORBITTRACK_ADMIN_EMAIL: "admin@migration.test",
+        ORBITTRACK_AGENT_TOKEN: "migration-test-token",
+        NEXTAUTH_SECRET: "migration-test-nextauth-secret",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -192,14 +196,14 @@ describe("legacy DB migration to multi-project schema", () => {
   });
 
   it("backfills existing issues into the default project with identifiers intact", async () => {
-    const res = await fetch(`${base}/api/issues?project=LIN`);
+    const res = await fetch(`${base}/api/issues?project=LIN`, { headers: agentHeaders });
     expect(res.status).toBe(200);
     const issues = await res.json();
     const identifiers = issues.map((i: { identifier: string }) => i.identifier).sort();
     expect(identifiers).toEqual(["LIN-1", "LIN-2", "LIN-5"]);
 
     // Each migrated issue is fully readable (status, priority, title carried).
-    const fifth = await fetch(`${base}/api/issues/LIN-5?project=LIN`);
+    const fifth = await fetch(`${base}/api/issues/LIN-5?project=LIN`, { headers: agentHeaders });
     expect(fifth.status).toBe(200);
     const fifthBody = await fifth.json();
     expect(fifthBody.title).toBe("fifth (gap from delete)");
@@ -226,20 +230,20 @@ describe("legacy DB migration to multi-project schema", () => {
     raw.close();
 
     // And the API sees them attached to the migrated issues.
-    const first = await fetch(`${base}/api/issues/LIN-1?project=LIN`);
+    const first = await fetch(`${base}/api/issues/LIN-1?project=LIN`, { headers: agentHeaders });
     expect(first.status).toBe(200);
     const firstBody = await first.json();
     expect(
       firstBody.labels.map((l: { name: string }) => l.name),
     ).toContain("bug");
 
-    const second = await fetch(`${base}/api/issues/LIN-2?project=LIN`);
+    const second = await fetch(`${base}/api/issues/LIN-2?project=LIN`, { headers: agentHeaders });
     expect(second.status).toBe(200);
     const body = await second.json();
     expect(body.questions.length).toBe(1);
     expect(body.questions[0].question).toBe("which cache?");
 
-    const blockers = await fetch(`${base}/api/issues/LIN-2/blockers?project=LIN`);
+    const blockers = await fetch(`${base}/api/issues/LIN-2/blockers?project=LIN`, { headers: agentHeaders });
     expect(blockers.status).toBe(200);
     const blockerList = await blockers.json();
     expect(
@@ -266,7 +270,7 @@ describe("legacy DB migration to multi-project schema", () => {
     // project composite. Verify by inserting a second project's #1 — it would
     // collide under the old global UNIQUE but must succeed now.
     raw.exec(
-      "INSERT INTO projects (key, name, next_number, created_at) VALUES ('TEST', 'TEST', 1, 0)",
+      "INSERT INTO projects (key, name, next_number, created_at, owner_id) VALUES ('TEST', 'TEST', 1, 0, 1)",
     );
     raw.prepare(
       "INSERT INTO issues (number, identifier, project_id, title, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -281,7 +285,7 @@ describe("legacy DB migration to multi-project schema", () => {
     // Legacy seq was 5; the next new issue must be LIN-6.
     const res = await fetch(`${base}/api/issues?project=LIN`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...agentHeaders },
       body: JSON.stringify({ title: "post-migration create" }),
     });
     expect(res.status).toBe(201);
@@ -296,12 +300,13 @@ describe("legacy DB migration to multi-project schema", () => {
     // continues past 6 (we created LIN-6 above) to 7.
     const del = await fetch(`${base}/api/issues/LIN-5?project=LIN`, {
       method: "DELETE",
+      headers: agentHeaders,
     });
     expect(del.status).toBe(204);
 
     const create = await fetch(`${base}/api/issues?project=LIN`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...agentHeaders },
       body: JSON.stringify({ title: "after delete" }),
     });
     expect(create.status).toBe(201);

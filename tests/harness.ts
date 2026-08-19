@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
+import { encode } from "next-auth/jwt";
 import { afterAll, beforeAll } from "vitest";
 
 /**
@@ -128,6 +129,8 @@ export function createHarness(): Harness {
   let proc: ChildProcess | null = null;
   let base = "";
   let dbPath = "";
+  let browserSession = "";
+  const nextAuthSecret = "orbittrack-test-nextauth-secret";
 
   const impl: Harness = {
     base: "",
@@ -163,6 +166,8 @@ export function createHarness(): Harness {
       ...init,
       headers: {
         "content-type": "application/json",
+        "authorization": "Bearer orbittrack-test-token",
+        ...(browserSession ? { cookie: `next-auth.session-token=${browserSession}` } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -320,6 +325,9 @@ export function createHarness(): Harness {
         env: {
           ...process.env,
           TRACKER_DB_PATH: dbPath,
+          ORBITTRACK_ADMIN_EMAIL: "admin@orbittrack.test",
+          ORBITTRACK_AGENT_TOKEN: "orbittrack-test-token",
+          NEXTAUTH_SECRET: nextAuthSecret,
           // Disable seeding by default so each file starts truly empty and
           // opts into labels explicitly. Tests that want seed data can create
           // labels via the API. A default project is still created (its key
@@ -335,6 +343,16 @@ export function createHarness(): Harness {
     impl.dbPath = dbPath;
     impl.fetch = doFetch;
     Object.assign(impl, sugar);
+
+    browserSession = await encode({
+      secret: nextAuthSecret,
+      token: {
+        email: "admin@orbittrack.test",
+        name: "Test administrator",
+        ownerId: 1,
+        isAdmin: true,
+      },
+    });
 
     // Wait for the server to be ready by polling the issues endpoint.
     const ready = await waitFor(base + "/api/issues", 45_000);

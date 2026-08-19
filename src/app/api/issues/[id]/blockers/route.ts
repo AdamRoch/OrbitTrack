@@ -6,7 +6,7 @@ import {
   notFound,
   ok,
   parseJson,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 
@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const blockers = getBlockers(db, project, id);
     if (blockers === null) return notFound("issue not found");
@@ -42,7 +42,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const body = await parseJson<AddBlockerBody>(req);
 

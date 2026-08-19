@@ -14,20 +14,26 @@ your source of truth for what to work on. Interact with it through the REST API
 The server must be running (`npm run dev`) before you can call it. If a request
 fails with a connection error, start the server first.
 
+Every REST request now requires an account-scoped agent bearer token:
+`Authorization: Bearer $ORBITTRACK_AGENT_TOKEN`. The server derives workspace
+scope from that credential; never assume a `?project=` parameter can grant
+access to another user's project.
+
 ## Standard workflow
 
 1. **Check the frontier** — what's grabbable right now (todo + unblocked):
    ```bash
-   curl localhost:3000/api/issues/frontier
+   curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/frontier
    ```
 2. **Claim one** — atomically transitions `todo` → `in_progress`:
    ```bash
-   curl -X POST localhost:3000/api/issues/LIN-42/claim
+   curl -X POST -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/LIN-42/claim
    ```
 3. **Do the work** — implement, test, verify.
 4. **Mark it done** when finished:
    ```bash
    curl -X PATCH localhost:3000/api/issues/LIN-42 \
+     -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
      -H 'content-type: application/json' \
      -d '{"status":"done"}'
    ```
@@ -36,6 +42,7 @@ If you discover a bug or a new task while working, **create a ticket** for it
 rather than fixing it inline:
 ```bash
 curl -X POST localhost:3000/api/issues \
+  -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"title":"...","description":"...","priority":2}'
 ```
@@ -57,8 +64,9 @@ identifier. Numeric `id` lookups are scoped the same way.
 To discover or create projects:
 
 ```bash
-curl localhost:3000/api/projects
+curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/projects
 curl -X POST localhost:3000/api/projects \
+  -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"key":"OEMR","name":"OpenEMR"}'
 ```
@@ -68,6 +76,7 @@ returned identifier):
 
 ```bash
 curl -X POST 'localhost:3000/api/issues?project=OEMR' \
+  -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"title":"first OpenEMR ticket"}'
 # → 201 { "identifier": "OEMR-1", "number": 1, ... }
@@ -109,7 +118,7 @@ project's key is `404` (no cross-project leakage).
 | `PATCH` | `/api/issues/:id` | partial `{ title, description, status, priority }` | `200` on success. |
 | `POST` | `/api/issues/:id/claim` | — | `todo` → `in_progress`. Idempotent if already `in_progress`. `409` if not claimable. |
 | `DELETE` | `/api/issues/:id` | — | `204`. |
-| `PUT` | `/api/issues/:id/labels` | `{ labelNames: string[] }` | Full replacement. Labels are global across projects. |
+| `PUT` | `/api/issues/:id/labels` | `{ labelNames: string[] }` | Full replacement. Labels are scoped to the agent workspace. |
 | `GET` | `/api/issues/:id/blockers` | — | Issues blocking this one. |
 | `POST` | `/api/issues/:id/blockers` | `{ blockerId: number\|string }` | Creates edge "A blocks B". `400` on self-edge/cycle; cross-project edges are `404` (the scoped resolver refuses foreign identifiers before the cross-project guard fires). |
 | `DELETE` | `/api/issues/:id/blockers/:blockerId` | — | Removes edge. |
@@ -127,6 +136,7 @@ project's key is `404` (no cross-project leakage).
 and need a human decision, post a question instead of stalling:
 ```bash
 curl -X POST localhost:3000/api/issues/LIN-42/questions \
+  -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"question":"should the cache be per-request or global?"}'
 ```
@@ -139,8 +149,8 @@ to `answered`. A separate orchestrating model answers via
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| `GET` | `/api/labels` | — | List all. Labels are global across projects. |
-| `POST` | `/api/labels` | `{ name, color? }` | `201` on success. |
+| `GET` | `/api/labels` | — | List labels in the agent workspace. |
+| `POST` | `/api/labels` | `{ name, color? }` | `201` on success in the agent workspace. |
 | `DELETE` | `/api/labels/:id` | — | `204`. Removes from all issues. |
 
 ### Error shape

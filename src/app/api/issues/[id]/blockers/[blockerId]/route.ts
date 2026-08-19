@@ -4,7 +4,7 @@ import {
   handleError,
   noContent,
   notFound,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 
@@ -19,7 +19,7 @@ export async function DELETE(req: Request, ctx: Context) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id, blockerId } = await ctx.params;
     const result = removeBlocker(db, project, id, blockerId);
     if (result === null) return notFound("issue not found");

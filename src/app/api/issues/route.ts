@@ -4,7 +4,7 @@ import {
   handleError,
   ok,
   parseJson,
-  requireProject,
+  requireAuthorizedProject,
 } from "@/lib/api";
 import {
   parseLabelNames,
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
 
     const status = url.searchParams.get("status") ?? undefined;
     const priorityParam = url.searchParams.get("priority");
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const body = await parseJson<CreateIssueInput>(req);
 
     const title = requireTitle(body.title);

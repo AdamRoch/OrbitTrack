@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { getFrontier } from "@/lib/domain";
-import { handleError, ok, requireProject } from "@/lib/api";
+import { handleError, ok, requireAuthorizedProject } from "@/lib/api";
 
 /**
  * GET /api/issues/frontier?project=KEY
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     return ok(getFrontier(db, project));
   } catch (err) {
     return handleError(err);

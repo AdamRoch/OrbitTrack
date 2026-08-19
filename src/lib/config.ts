@@ -31,3 +31,13 @@ export const SYSTEM_LABEL_COLOR = "#22c55e";
  * when the URL carries no ?project= param.
  */
 export const ACTIVE_PROJECT_COOKIE = "ot_project";
+
+/** Bootstrap identity for the existing local workspace. Production must set it. */
+const IS_TEST = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+
+export const ADMIN_EMAIL = process.env.ORBITTRACK_ADMIN_EMAIL?.trim().toLowerCase() ??
+  (IS_TEST ? "admin@orbittrack.test" : "");
+
+/** Only used to seed a local/test agent credential. Never expose this value in responses. */
+export const BOOTSTRAP_AGENT_TOKEN = process.env.ORBITTRACK_AGENT_TOKEN ??
+  (IS_TEST ? "orbittrack-test-token" : "");

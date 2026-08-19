@@ -54,18 +54,19 @@ export const priorityLabels: Record<Priority, string> = {
  */
 export const projects = sqliteTable("projects", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerId: integer("owner_id").notNull().default(1).references(() => users.id, { onDelete: "cascade" }),
   // The identifier prefix, e.g. "LIN" or "OEMR". Stored uppercased; alphabetic
   // only (no digits) so it can't collide with the numeric part of an identifier.
   // Unique case-insensitively (enforced on create; stored uppercase so the
   // UNIQUE constraint is sufficient).
-  key: text("key").notNull().unique(),
+  key: text("key").notNull(),
   name: text("name").notNull(),
   // Per-project high-water counter for issue numbers. Using a stored counter
   // (instead of MAX(number)+1) guarantees numbers are never reused, even after
   // the highest-numbered issue is deleted. Atomically incremented at create.
   nextNumber: integer("next_number").notNull().default(0),
   createdAt: integer("created_at").notNull(),
-});
+}, (t) => [uniqueIndex("projects_owner_key_unique").on(t.ownerId, t.key)]);
 
 export const issues = sqliteTable(
   "issues",
@@ -96,8 +97,27 @@ export const issues = sqliteTable(
 
 export const labels = sqliteTable("labels", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull().unique(),
+  ownerId: integer("owner_id").notNull().default(1).references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
   color: text("color").notNull(),
+}, (t) => [uniqueIndex("labels_owner_name_unique").on(t.ownerId, t.name)]);
+
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  googleSubject: text("google_subject").unique(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const agentTokens = sqliteTable("agent_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerId: integer("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  name: text("name").notNull(),
+  createdAt: integer("created_at").notNull(),
+  revokedAt: integer("revoked_at"),
 });
 
 export const issueLabels = sqliteTable(
@@ -162,6 +182,8 @@ export type LabelRow = typeof labels.$inferSelect;
 export type DependencyRow = typeof dependencies.$inferSelect;
 export type QuestionRow = typeof issueQuestions.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
+export type UserRow = typeof users.$inferSelect;
+export type AgentTokenRow = typeof agentTokens.$inferSelect;
 
 /**
  * A question's derived state. `open` = asked, awaiting an answer;

@@ -6,7 +6,7 @@ import {
   notFound,
   ok,
   parseJson,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 import {
@@ -27,7 +27,7 @@ export async function GET(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const issue = getIssue(db, project, id);
     if (!issue) return notFound("issue not found");
@@ -45,7 +45,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const body = await parseJson<UpdateIssueInput>(req);
 
@@ -78,7 +78,7 @@ export async function DELETE(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const deleted = deleteIssue(db, project, id);
     if (!deleted) return notFound("issue not found");

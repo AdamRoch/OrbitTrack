@@ -56,6 +56,7 @@ For each ticket in your queue, repeat:
 6. **Mark done.**
    ```bash
    curl -X PATCH localhost:3000/api/issues/:id \
+     -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
      -H 'content-type: application/json' \
      -d '{"status":"done"}'
    ```

@@ -6,6 +6,7 @@ import { CreateLabelForm, DeleteLabelButton } from "./label-forms";
 import { AlienIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { SYSTEM_LABEL_COLOR, SYSTEM_LABEL_NAME } from "@/lib/config";
+import { getBrowserSession } from "@/lib/auth";
 
 /**
  * Labels management (/labels). List + create + delete. Deleting a label
@@ -15,7 +16,9 @@ import { SYSTEM_LABEL_COLOR, SYSTEM_LABEL_NAME } from "@/lib/config";
  */
 export default async function LabelsPage() {
   const db = getServerDb();
-  const labels = listLabels(db);
+  const session = await getBrowserSession();
+  if (!session) return null;
+  const labels = listLabels(db, session.user.ownerId);
   // Stored labels won't include the system label, but filter defensively in
   // case an older seed left one behind so it isn't shown twice / as deletable.
   const userLabels = labels.filter(

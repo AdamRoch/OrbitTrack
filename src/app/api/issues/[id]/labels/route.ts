@@ -5,7 +5,7 @@ import {
   notFound,
   ok,
   parseJson,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 import { parseLabelNames } from "@/lib/validate";
@@ -25,7 +25,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const body = await parseJson<SetLabelsBody>(req);
 

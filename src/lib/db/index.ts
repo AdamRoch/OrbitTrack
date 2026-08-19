@@ -1,11 +1,12 @@
 import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import * as schema from "./schema";
-import { PROJECT_PREFIX } from "../config";
+import { PROJECT_PREFIX, ADMIN_EMAIL, BOOTSTRAP_AGENT_TOKEN } from "../config";
 const { labels, projects } = schema;
 
 export type DB = BetterSQLite3Database<typeof schema>;
@@ -46,9 +47,8 @@ export function getDb(): DB {
   _raw.pragma("foreign_keys = ON");
   _db = drizzle(_raw, { schema });
   ensureSchema(_raw);
-  // Guarantee the default project exists so the app has a scope to operate in
-  // before any /api/projects call is made. Idempotent.
-  ensureDefaultProject(_raw);
+  const ownerId = ensureTenantSchema(_raw, _dbPath);
+  ensureDefaultProject(_raw, null, ownerId);
   return _db;
 }
 
@@ -61,7 +61,8 @@ export function createDb(path: string): { db: DB; raw: Database.Database } {
   raw.pragma("journal_mode = WAL");
   raw.pragma("foreign_keys = ON");
   ensureSchema(raw);
-  ensureDefaultProject(raw);
+  const ownerId = ensureTenantSchema(raw, path);
+  ensureDefaultProject(raw, null, ownerId);
   return { db: drizzle(raw, { schema }), raw };
 }
 
@@ -304,7 +305,7 @@ function rebuildLegacyIssuesTable(raw: Database.Database): void {
   // legacy schema has one global prefix, so all issues share it. Only fall
   // back to PROJECT_PREFIX when there are no issues.
   const legacyKey = legacyIssuePrefix(raw);
-  const defaultProject = ensureDefaultProject(raw, legacyKey);
+  const defaultProject = ensureDefaultProject(raw, legacyKey, 1);
 
   // Seed from the legacy high-water counter if present (preferred — it is the
   // authoritative never-reuse sequence). Fall back to MAX(number) so we never
@@ -437,7 +438,8 @@ function columnExists(raw: Database.Database, table: string, col: string): boole
  */
 function ensureDefaultProject(
   raw: Database.Database,
-  keyOverride?: string | null,
+  keyOverride: string | null | undefined,
+  ownerId: number,
 ): {
   id: number;
   key: string;
@@ -451,15 +453,38 @@ function ensureDefaultProject(
   // project and wrongly create a second one. Only when no project exists at all
   // (fresh DB) do we create one keyed by PROJECT_PREFIX.
   const key = keyOverride ?? PROJECT_PREFIX;
+  // Legacy issue migration runs before the tenancy migration adds owner_id.
+  // Use the old project shape for that one narrow transition; the subsequent
+  // tenancy migration assigns the resulting project to the administrator.
+  if (!columnExists(raw, "projects", "owner_id")) {
+    const legacyLookup = keyOverride != null
+      ? raw.prepare("SELECT id, key, name, next_number FROM projects WHERE key = ?").get(key)
+      : raw.prepare("SELECT id, key, name, next_number FROM projects ORDER BY id LIMIT 1").get();
+    const existing = legacyLookup as
+      | { id: number; key: string; name: string; next_number: number }
+      | undefined;
+    if (existing) {
+      return {
+        id: existing.id,
+        key: existing.key,
+        name: existing.name,
+        nextNumber: existing.next_number,
+      };
+    }
+    const info = raw
+      .prepare("INSERT INTO projects (key, name, next_number, created_at) VALUES (?, ?, 0, ?)")
+      .run(key, key, Date.now());
+    return { id: Number(info.lastInsertRowid), key, name: key, nextNumber: 0 };
+  }
   const lookup = keyOverride != null
     ? raw
-        .prepare("SELECT id, key, name, next_number FROM projects WHERE key = ?")
-        .get(key)
+        .prepare("SELECT id, key, name, next_number FROM projects WHERE key = ? AND owner_id = ?")
+        .get(key, ownerId)
     : raw
         .prepare(
-          "SELECT id, key, name, next_number FROM projects ORDER BY id LIMIT 1",
+          "SELECT id, key, name, next_number FROM projects WHERE owner_id = ? ORDER BY id LIMIT 1",
         )
-        .get();
+        .get(ownerId);
   const existing = lookup as
     | { id: number; key: string; name: string; next_number: number }
     | undefined;
@@ -474,10 +499,114 @@ function ensureDefaultProject(
   const now = Date.now();
   const info = raw
     .prepare(
-      "INSERT INTO projects (key, name, next_number, created_at) VALUES (?, ?, 0, ?)",
+      "INSERT INTO projects (owner_id, key, name, next_number, created_at) VALUES (?, ?, ?, 0, ?)",
     )
-    .run(key, key, now);
+    .run(ownerId, key, key, now);
   return { id: Number(info.lastInsertRowid), key, name: key, nextNumber: 0 };
+}
+
+/**
+ * Forward-only tenancy migration. Existing local records become the configured
+ * administrator's workspace. Tables are rebuilt because SQLite cannot remove
+ * the old global UNIQUE constraints on project keys and label names.
+ */
+function ensureTenantSchema(raw: Database.Database, path: string): number {
+  if (!ADMIN_EMAIL || !BOOTSTRAP_AGENT_TOKEN) {
+    throw new Error("ORBITTRACK_ADMIN_EMAIL and ORBITTRACK_AGENT_TOKEN are required in production");
+  }
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      google_subject TEXT UNIQUE,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS agent_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      revoked_at INTEGER
+    );
+  `);
+  const now = Date.now();
+  let admin = raw.prepare("SELECT id FROM users WHERE email = ?").get(ADMIN_EMAIL) as { id: number } | undefined;
+  // Repair only the development placeholder created by pre-release builds;
+  // never reassign a real Google-bound account merely because configuration
+  // changed.
+  if (!admin) {
+    const placeholder = raw.prepare("SELECT id FROM users WHERE email = 'admin@orbittrack.local' AND is_admin = 1 AND google_subject IS NULL").get() as { id: number } | undefined;
+    if (placeholder) {
+      raw.prepare("UPDATE users SET email = ? WHERE id = ?").run(ADMIN_EMAIL, placeholder.id);
+      raw.prepare("DELETE FROM agent_tokens WHERE owner_id = ? AND token_hash = ?")
+        .run(placeholder.id, createHash("sha256").update("orbittrack-local-dev-token").digest("hex"));
+      admin = placeholder;
+    }
+  }
+  if (!admin) {
+    const result = raw.prepare("INSERT INTO users (email, is_admin, created_at) VALUES (?, 1, ?)").run(ADMIN_EMAIL, now);
+    admin = { id: Number(result.lastInsertRowid) };
+  }
+  const ownerId = admin.id;
+  const tokenHash = createHash("sha256").update(BOOTSTRAP_AGENT_TOKEN).digest("hex");
+  raw.prepare("INSERT OR IGNORE INTO agent_tokens (owner_id, token_hash, name, created_at) VALUES (?, ?, 'bootstrap-agent', ?)").run(ownerId, tokenHash, now);
+
+  if (!columnExists(raw, "projects", "owner_id") || !columnExists(raw, "labels", "owner_id")) {
+    backupBeforeTenantMigration(raw, path);
+  }
+  if (!columnExists(raw, "projects", "owner_id")) {
+    const fk = raw.pragma("foreign_keys", { simple: true });
+    raw.pragma("foreign_keys = OFF");
+    try {
+      raw.transaction(() => {
+        raw.exec(`CREATE TABLE projects_tenant_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          key TEXT NOT NULL,
+          name TEXT NOT NULL,
+          next_number INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          UNIQUE(owner_id, key)
+        );`);
+        raw.prepare("INSERT INTO projects_tenant_new (id, owner_id, key, name, next_number, created_at) SELECT id, ?, key, name, next_number, created_at FROM projects").run(ownerId);
+        raw.exec("DROP TABLE projects; ALTER TABLE projects_tenant_new RENAME TO projects;");
+      })();
+    } finally { raw.pragma(`foreign_keys = ${fk ? "ON" : "OFF"}`); }
+  }
+  if (!columnExists(raw, "labels", "owner_id")) {
+    const fk = raw.pragma("foreign_keys", { simple: true });
+    raw.pragma("foreign_keys = OFF");
+    try {
+      raw.transaction(() => {
+        raw.exec(`CREATE TABLE labels_tenant_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          color TEXT NOT NULL,
+          UNIQUE(owner_id, name)
+        );`);
+        raw.prepare("INSERT INTO labels_tenant_new (id, owner_id, name, color) SELECT id, ?, name, color FROM labels").run(ownerId);
+        raw.exec("DROP TABLE labels; ALTER TABLE labels_tenant_new RENAME TO labels;");
+      })();
+    } finally { raw.pragma(`foreign_keys = ${fk ? "ON" : "OFF"}`); }
+  }
+  raw.exec("CREATE INDEX IF NOT EXISTS idx_projects_owner ON projects(owner_id); CREATE INDEX IF NOT EXISTS idx_labels_owner ON labels(owner_id);");
+  return ownerId;
+}
+
+/** SQLite VACUUM INTO includes committed WAL state, unlike copying the .db file. */
+function backupBeforeTenantMigration(raw: Database.Database, path: string): void {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${path}.pre-tenant-${stamp}.db`;
+  const quoted = backupPath.replace(/'/g, "''");
+  try {
+    raw.exec(`VACUUM INTO '${quoted}'`);
+  } catch (error) {
+    throw new Error(`refusing tenancy migration because SQLite backup failed: ${String(error)}`);
+  }
 }
 
 /**
@@ -487,12 +616,13 @@ function ensureDefaultProject(
  */
 export function seedDefaultsIfNeeded(
   db: DB,
+  ownerId: number,
   defaults: { name: string; color: string }[] = DEFAULT_LABELS,
 ): void {
-  const existing = db.select().from(labels).all();
+  const existing = db.select().from(labels).where(eq(labels.ownerId, ownerId)).all();
   if (existing.length > 0) return;
   for (const d of defaults) {
-    db.insert(labels).values({ name: d.name, color: d.color }).run();
+    db.insert(labels).values({ ownerId, name: d.name, color: d.color }).run();
   }
 }
 
@@ -533,6 +663,37 @@ export function getProjectByKey(db: DB, key: string): schema.ProjectRow | null {
   const upper = key.trim().toUpperCase();
   if (upper.length === 0) return null;
   return db.select().from(projects).where(eq(projects.key, upper)).get() ?? null;
+}
+
+export function getProjectByKeyForOwner(
+  db: DB,
+  ownerId: number,
+  key: string,
+): schema.ProjectRow | null {
+  const upper = key.trim().toUpperCase();
+  if (upper.length === 0) return null;
+  return db.select().from(projects).where(and(eq(projects.ownerId, ownerId), eq(projects.key, upper))).get() ?? null;
+}
+
+export function getDefaultProjectForOwner(db: DB, ownerId: number): schema.ProjectRow | null {
+  return db.select().from(projects).where(eq(projects.ownerId, ownerId)).orderBy(projects.id).limit(1).get() ?? null;
+}
+
+export function findUserByEmail(db: DB, email: string): schema.UserRow | null {
+  return db.select().from(schema.users).where(eq(schema.users.email, email.toLowerCase())).get() ?? null;
+}
+
+export function bindGoogleSubject(db: DB, email: string, subject: string, name?: string | null): schema.UserRow | null {
+  const user = findUserByEmail(db, email);
+  if (!user) return null;
+  if (user.googleSubject && user.googleSubject !== subject) return null;
+  db.update(schema.users).set({ googleSubject: subject, name: name ?? user.name }).where(eq(schema.users.id, user.id)).run();
+  return db.select().from(schema.users).where(eq(schema.users.id, user.id)).get() ?? null;
+}
+
+export function findActiveAgentByToken(db: DB, rawToken: string): schema.AgentTokenRow | null {
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  return db.select().from(schema.agentTokens).where(and(eq(schema.agentTokens.tokenHash, tokenHash), isNull(schema.agentTokens.revokedAt))).get() ?? null;
 }
 
 /**

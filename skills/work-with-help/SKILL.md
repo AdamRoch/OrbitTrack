@@ -54,6 +54,7 @@ questions like they cost money, because the expensive model answering them does.
 
 ```bash
 curl -X POST localhost:3000/api/issues/:id/questions \
+  -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"question":"should the cache be per-request or global?"}'
 ```
@@ -92,7 +93,7 @@ push through.
 After posting, poll the issue until your question's status flips to `answered`:
 
 ```bash
-curl localhost:3000/api/issues/:id
+curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/:id
 ```
 
 The response includes a `questions[]` array. Each question has a `status` of
