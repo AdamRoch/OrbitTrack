@@ -91,6 +91,23 @@ export function resetDbCache(): void {
 }
 
 /**
+ * Readiness is deliberately narrower than a liveness check: the process is
+ * ready only after it can open the configured database, finish initialization,
+ * and execute a harmless query. Errors stay inside this boundary so callers
+ * never receive file paths, credentials, or SQLite details.
+ */
+export function isDatabaseReady(): boolean {
+  try {
+    const db = getDb();
+    db.run(sql`SELECT 1`);
+    return true;
+  } catch {
+    console.error("[health] database readiness check failed");
+    return false;
+  }
+}
+
+/**
  * One-time pre-migration snapshot. When a legacy pre-projects DB is detected
  * (an `issues` table with no `project_id` column) and it holds real data, dump
  * issues / labels / issue_labels / dependencies / issue_questions to a

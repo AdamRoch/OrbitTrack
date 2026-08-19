@@ -115,6 +115,13 @@ On first startup, the existing SQLite tracker is assigned to the configured
 administrator account. Before that forward-only migration, OrbitTrack creates
 a consistent SQLite backup using `VACUUM INTO`, including committed WAL state.
 
+### Readiness probe
+
+`GET /api/health` is intentionally public and returns no tracker data. Railway
+should use it as the service health check: `{ "status": "ready" }` with HTTP
+200 means OrbitTrack initialized and queried its configured database; HTTP 503
+with `{ "status": "unavailable" }` means it is not ready to receive traffic.
+
 ---
 
 ## The frontier
