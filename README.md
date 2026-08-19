@@ -122,6 +122,14 @@ should use it as the service health check: `{ "status": "ready" }` with HTTP
 200 means OrbitTrack initialized and queried its configured database; HTTP 503
 with `{ "status": "unavailable" }` means it is not ready to receive traffic.
 
+### Registration email
+
+Set `RESEND_API_KEY` only in local/deployment secrets and verify
+`orbittrack.adamroch.com` in Resend before production use. Notifications send
+from `OrbitTrack <notifications@orbittrack.adamroch.com>` by default. Each new
+workspace stores one durable outbox record; provider failures are retried with
+the same Resend idempotency key.
+
 ---
 
 ## The frontier

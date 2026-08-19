@@ -41,3 +41,6 @@ export const ADMIN_EMAIL = process.env.ORBITTRACK_ADMIN_EMAIL?.trim().toLowerCas
 /** Only used to seed a local/test agent credential. Never expose this value in responses. */
 export const BOOTSTRAP_AGENT_TOKEN = process.env.ORBITTRACK_AGENT_TOKEN ??
   (IS_TEST ? "orbittrack-test-token" : "");
+
+export const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim() ?? "";
+export const RESEND_FROM = process.env.RESEND_FROM?.trim() || "OrbitTrack <notifications@orbittrack.adamroch.com>";

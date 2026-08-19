@@ -1,6 +1,7 @@
 import { getServerSession, type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { findUserByEmail, getDb, provisionGoogleUser } from "./db";
+import { deliverPendingNotifications } from "./notifications";
 
 declare module "next-auth" {
   interface Session {
@@ -26,6 +27,7 @@ export const authOptions: NextAuthOptions = {
       if (result.kind === "full" || result.kind === "closed") {
         return `/api/auth/denied?reason=${result.kind}`;
       }
+      if (result.kind === "created") void deliverPendingNotifications();
       return result.kind !== "identity_conflict";
     },
     async jwt({ token, account, profile }) {

@@ -28,6 +28,7 @@ describe("self-service registration", () => {
     expect(raw.prepare("SELECT count(*) AS n FROM users WHERE email = 'new@example.test'").get()).toEqual({ n: 1 });
     expect(raw.prepare("SELECT count(*) AS n FROM projects WHERE owner_id = (SELECT id FROM users WHERE email = 'new@example.test')").get()).toEqual({ n: 0 });
     expect(raw.prepare("SELECT active_account_count FROM registration_settings WHERE id = 1").get()).toEqual({ active_account_count: 1 });
+    expect(raw.prepare("SELECT owner_email, status, attempts FROM notification_outbox").all()).toEqual([{ owner_email: "new@example.test", status: "pending", attempts: 0 }]);
     raw.close();
   });
 
@@ -49,6 +50,7 @@ describe("self-service registration", () => {
     expect(provisionGoogleUserOnDatabase(raw, "member@example.test", "member-subject", null).kind).toBe("existing");
     expect(provisionGoogleUserOnDatabase(raw, "new@example.test", "new-subject", null).kind).toBe("closed");
     expect(raw.prepare("SELECT count(*) AS n FROM users WHERE is_admin = 0").get()).toEqual({ n: 1 });
+    expect(raw.prepare("SELECT count(*) AS n FROM notification_outbox").get()).toEqual({ n: 1 });
     raw.close();
   });
 });

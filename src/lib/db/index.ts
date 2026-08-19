@@ -62,6 +62,14 @@ export function getDb(): DB {
   return _db;
 }
 
+/** Internal raw connection for small transactional infrastructure such as the
+ * durable notification outbox. Application data access stays on Drizzle. */
+export function getRawDb(): Database.Database {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return _raw;
+}
+
 /**
  * Create a fresh DB against an explicit path (used by tests). Bypasses the
  * process cache entirely and always creates the schema + default project.
@@ -565,6 +573,21 @@ function ensureTenantSchema(raw: Database.Database, path: string): number {
       active_account_count INTEGER NOT NULL DEFAULT 0 CHECK (active_account_count >= 0),
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notification_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dedupe_key TEXT NOT NULL UNIQUE,
+      owner_email TEXT NOT NULL,
+      owner_name TEXT,
+      created_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL,
+      delivered_at INTEGER,
+      provider_id TEXT,
+      last_error TEXT,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notification_outbox_due ON notification_outbox(status, next_attempt_at);
   `);
   const now = Date.now();
   let admin = raw.prepare("SELECT id FROM users WHERE email = ?").get(ADMIN_EMAIL) as { id: number } | undefined;
@@ -700,9 +723,12 @@ export function provisionGoogleUserOnDatabase(
     ).run(Date.now());
     if (claim.changes !== 1) return registrationSettingsFromRaw(raw).registrationsOpen ? { kind: "full" } : { kind: "closed" };
 
+    const createdAt = Date.now();
     const inserted = raw.prepare("INSERT INTO users (google_subject, email, name, is_admin, created_at) VALUES (?, ?, ?, 0, ?)")
-      .run(googleSubject, email, name, Date.now());
+      .run(googleSubject, email, name, createdAt);
     const user = raw.prepare("SELECT * FROM users WHERE id = ?").get(inserted.lastInsertRowid) as schema.UserRow;
+    raw.prepare("INSERT INTO notification_outbox (dedupe_key, owner_email, owner_name, created_at, next_attempt_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(`workspace-created:${user.id}`, user.email, user.name, createdAt, createdAt, createdAt);
     return { kind: "created", user };
   });
   return register();
