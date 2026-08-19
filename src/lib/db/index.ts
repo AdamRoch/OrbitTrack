@@ -4,12 +4,22 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { existsSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import * as schema from "./schema";
 import { PROJECT_PREFIX, ADMIN_EMAIL, BOOTSTRAP_AGENT_TOKEN } from "../config";
 const { labels, projects } = schema;
 
 export type DB = BetterSQLite3Database<typeof schema>;
+
+export type RegistrationSettings = {
+  registrationsOpen: boolean;
+  accountCap: number;
+  activeAccountCount: number;
+};
+
+export type RegistrationResult =
+  | { kind: "existing" | "created"; user: schema.UserRow }
+  | { kind: "closed" | "full" | "identity_conflict" };
 
 /**
  * Where the single SQLite file lives. Overridable via env so tests can point
@@ -531,6 +541,13 @@ function ensureTenantSchema(raw: Database.Database, path: string): number {
       created_at INTEGER NOT NULL,
       revoked_at INTEGER
     );
+    CREATE TABLE IF NOT EXISTS registration_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      registrations_open INTEGER NOT NULL DEFAULT 1 CHECK (registrations_open IN (0, 1)),
+      account_cap INTEGER NOT NULL DEFAULT 10 CHECK (account_cap >= 0),
+      active_account_count INTEGER NOT NULL DEFAULT 0 CHECK (active_account_count >= 0),
+      updated_at INTEGER NOT NULL
+    );
   `);
   const now = Date.now();
   let admin = raw.prepare("SELECT id FROM users WHERE email = ?").get(ADMIN_EMAIL) as { id: number } | undefined;
@@ -551,6 +568,9 @@ function ensureTenantSchema(raw: Database.Database, path: string): number {
     admin = { id: Number(result.lastInsertRowid) };
   }
   const ownerId = admin.id;
+  raw.prepare(
+    "INSERT OR IGNORE INTO registration_settings (id, registrations_open, account_cap, active_account_count, updated_at) VALUES (1, 1, 10, (SELECT COUNT(*) FROM users WHERE is_admin = 0), ?)",
+  ).run(now);
   const tokenHash = createHash("sha256").update(BOOTSTRAP_AGENT_TOKEN).digest("hex");
   raw.prepare("INSERT OR IGNORE INTO agent_tokens (owner_id, token_hash, name, created_at) VALUES (?, ?, 'bootstrap-agent', ?)").run(ownerId, tokenHash, now);
 
@@ -595,6 +615,111 @@ function ensureTenantSchema(raw: Database.Database, path: string): number {
   }
   raw.exec("CREATE INDEX IF NOT EXISTS idx_projects_owner ON projects(owner_id); CREATE INDEX IF NOT EXISTS idx_labels_owner ON labels(owner_id);");
   return ownerId;
+}
+
+function registrationSettingsFromRaw(raw: Database.Database): RegistrationSettings {
+  const row = raw.prepare(
+    "SELECT registrations_open, account_cap, active_account_count FROM registration_settings WHERE id = 1",
+  ).get() as { registrations_open: number; account_cap: number; active_account_count: number };
+  return {
+    registrationsOpen: row.registrations_open === 1,
+    accountCap: row.account_cap,
+    activeAccountCount: row.active_account_count,
+  };
+}
+
+/** Read platform registration state. Only callers that already authenticated an
+ * administrator should expose this data to a browser. */
+export function getRegistrationSettings(): RegistrationSettings {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return registrationSettingsFromRaw(_raw);
+}
+
+/** Administrator-only mutation. The cap may be lowered below the current
+ * count: that closes capacity for new accounts without affecting members. */
+export function updateRegistrationSettings(input: {
+  registrationsOpen: boolean;
+  accountCap: number;
+}): RegistrationSettings {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  if (!Number.isInteger(input.accountCap) || input.accountCap < 0 || input.accountCap > 10_000) {
+    throw new Error("account cap must be an integer between 0 and 10000");
+  }
+  _raw.prepare(
+    "UPDATE registration_settings SET registrations_open = ?, account_cap = ?, updated_at = ? WHERE id = 1",
+  ).run(input.registrationsOpen ? 1 : 0, input.accountCap, Date.now());
+  return registrationSettingsFromRaw(_raw);
+}
+
+/**
+ * Find or atomically create the account behind a verified Google identity.
+ * The conditional counter update is the capacity decision: only one writer can
+ * consume a slot, so concurrent first sign-ins cannot exceed the cap.
+ */
+export function provisionGoogleUserOnDatabase(
+  raw: Database.Database,
+  email: string,
+  googleSubject: string,
+  name: string | null,
+): RegistrationResult {
+  const register = raw.transaction((): RegistrationResult => {
+    const bySubject = raw.prepare("SELECT * FROM users WHERE google_subject = ?").get(googleSubject) as schema.UserRow | undefined;
+    if (bySubject) return bySubject.email === email ? { kind: "existing", user: bySubject } : { kind: "identity_conflict" };
+
+    const byEmail = raw.prepare("SELECT * FROM users WHERE email = ?").get(email) as schema.UserRow | undefined;
+    if (byEmail) {
+      raw.prepare("UPDATE users SET google_subject = ?, name = COALESCE(?, name) WHERE id = ? AND google_subject IS NULL")
+        .run(googleSubject, name, byEmail.id);
+      const linked = raw.prepare("SELECT * FROM users WHERE id = ?").get(byEmail.id) as schema.UserRow;
+      return linked.googleSubject === googleSubject ? { kind: "existing", user: linked } : { kind: "identity_conflict" };
+    }
+
+    const settings = registrationSettingsFromRaw(raw);
+    if (!settings.registrationsOpen) return { kind: "closed" };
+    const claim = raw.prepare(
+      "UPDATE registration_settings SET active_account_count = active_account_count + 1, updated_at = ? WHERE id = 1 AND registrations_open = 1 AND active_account_count < account_cap",
+    ).run(Date.now());
+    if (claim.changes !== 1) return registrationSettingsFromRaw(raw).registrationsOpen ? { kind: "full" } : { kind: "closed" };
+
+    const inserted = raw.prepare("INSERT INTO users (google_subject, email, name, is_admin, created_at) VALUES (?, ?, ?, 0, ?)")
+      .run(googleSubject, email, name, Date.now());
+    const user = raw.prepare("SELECT * FROM users WHERE id = ?").get(inserted.lastInsertRowid) as schema.UserRow;
+    return { kind: "created", user };
+  });
+  return register();
+}
+
+export function provisionGoogleUser(email: string, googleSubject: string, name: string | null): RegistrationResult {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return provisionGoogleUserOnDatabase(_raw, email, googleSubject, name);
+}
+
+export function createAgentToken(ownerId: number, name: string): { id: number; token: string } {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  const token = `ot_${randomBytes(24).toString("base64url")}`;
+  const result = _raw.prepare(
+    "INSERT INTO agent_tokens (owner_id, token_hash, name, created_at) VALUES (?, ?, ?, ?)",
+  ).run(ownerId, createHash("sha256").update(token).digest("hex"), name, Date.now());
+  return { id: Number(result.lastInsertRowid), token };
+}
+
+export function listAgentTokens(ownerId: number): Omit<schema.AgentTokenRow, "tokenHash">[] {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return _raw.prepare(
+    "SELECT id, owner_id AS ownerId, name, created_at AS createdAt, revoked_at AS revokedAt FROM agent_tokens WHERE owner_id = ? ORDER BY id DESC",
+  ).all(ownerId) as Omit<schema.AgentTokenRow, "tokenHash">[];
+}
+
+export function revokeAgentToken(ownerId: number, tokenId: number): boolean {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return _raw.prepare("UPDATE agent_tokens SET revoked_at = ? WHERE id = ? AND owner_id = ? AND revoked_at IS NULL")
+    .run(Date.now(), tokenId, ownerId).changes === 1;
 }
 
 /** SQLite VACUUM INTO includes committed WAL state, unlike copying the .db file. */

@@ -4,6 +4,7 @@ import { getDefaultProjectForOwner, getProjectByKeyForOwner, findActiveAgentByTo
 import type { ProjectRow } from "./db/schema";
 import type { ApiErrorBody } from "./types";
 import { ValidationError } from "./validate";
+import { getBrowserSession } from "./auth";
 
 /**
  * Shared HTTP helpers for the REST API. Every response goes through these so
@@ -113,6 +114,16 @@ export function requireAgentPrincipal(req: Request, db: DB): AgentPrincipal {
   const token = findActiveAgentByToken(db, match[1]);
   if (!token) throw new AuthenticationError("authentication required");
   return { ownerId: token.ownerId, tokenId: token.id };
+}
+
+/** A browser user may use the same project creation endpoint as the UI; agents
+ * remain bearer-token-only. The workspace always comes from the credential. */
+export async function requireWorkspacePrincipal(req: Request, db: DB): Promise<AgentPrincipal> {
+  const authorization = req.headers.get("authorization");
+  if (authorization?.trim()) return requireAgentPrincipal(req, db);
+  const session = await getBrowserSession();
+  if (!session) throw new AuthenticationError("authentication required");
+  return { ownerId: session.user.ownerId, tokenId: 0 };
 }
 
 /** Resolve an API project only within the authenticated agent's workspace. */

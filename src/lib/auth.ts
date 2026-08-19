@@ -1,6 +1,6 @@
 import { getServerSession, type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { bindGoogleSubject, findUserByEmail, getDb } from "./db";
+import { findUserByEmail, getDb, provisionGoogleUser } from "./db";
 
 declare module "next-auth" {
   interface Session {
@@ -22,10 +22,11 @@ export const authOptions: NextAuthOptions = {
       const email = typeof profile?.email === "string" ? profile.email.toLowerCase() : null;
       const verified = (profile as { email_verified?: unknown } | undefined)?.email_verified === true;
       if (!email || !verified || !account?.providerAccountId) return false;
-      const db = getDb();
-      const existing = findUserByEmail(db, email);
-      if (!existing) return false; // Self-service onboarding is ORBT-19.
-      return Boolean(bindGoogleSubject(db, email, account.providerAccountId, typeof profile?.name === "string" ? profile.name : null));
+      const result = provisionGoogleUser(email, account.providerAccountId, typeof profile?.name === "string" ? profile.name : null);
+      if (result.kind === "full" || result.kind === "closed") {
+        return `/api/auth/denied?reason=${result.kind}`;
+      }
+      return result.kind !== "identity_conflict";
     },
     async jwt({ token, account, profile }) {
       if (account?.provider === "google" && typeof profile?.email === "string") {

@@ -120,6 +120,15 @@ export const agentTokens = sqliteTable("agent_tokens", {
   revokedAt: integer("revoked_at"),
 });
 
+/** Singleton platform control plane for self-service account registration. */
+export const registrationSettings = sqliteTable("registration_settings", {
+  id: integer("id").primaryKey(),
+  registrationsOpen: integer("registrations_open", { mode: "boolean" }).notNull().default(true),
+  accountCap: integer("account_cap").notNull().default(10),
+  activeAccountCount: integer("active_account_count").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const issueLabels = sqliteTable(
   "issue_labels",
   {
@@ -184,6 +193,7 @@ export type QuestionRow = typeof issueQuestions.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type AgentTokenRow = typeof agentTokens.$inferSelect;
+export type RegistrationSettingsRow = typeof registrationSettings.$inferSelect;
 
 /**
  * A question's derived state. `open` = asked, awaiting an answer;

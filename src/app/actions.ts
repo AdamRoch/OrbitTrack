@@ -30,6 +30,7 @@ import {
 import type { ProjectRow } from "@/lib/db/schema";
 import { ACTIVE_PROJECT_COOKIE } from "@/lib/config";
 import { getBrowserSession } from "@/lib/auth";
+import { updateRegistrationSettings } from "@/lib/db";
 
 /**
  * Server actions — the UI's mutation seam. They go through the same domain
@@ -54,6 +55,22 @@ export interface ActionResult {
 
 function fail(message: string): ActionResult {
   return { ok: false, error: message };
+}
+
+/** Platform control-plane action. This is deliberately separate from normal
+ * workspace mutations: only the configured administrator may change signup. */
+export async function updateRegistrationSettingsAction(formData: FormData): Promise<void> {
+  const session = await getBrowserSession();
+  if (!session?.user.isAdmin) throw new Error("administrator access is required");
+  const cap = Number(formData.get("accountCap"));
+  if (!Number.isInteger(cap) || cap < 0 || cap > 10_000) {
+    throw new Error("account cap must be an integer between 0 and 10000");
+  }
+  updateRegistrationSettings({
+    registrationsOpen: formData.get("registrationsOpen") === "on",
+    accountCap: cap,
+  });
+  revalidatePath("/admin/registration");
 }
 
 function isRedirectError(e: unknown): boolean {

@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { createProject, listProjects } from "@/lib/domain";
-import { handleError, ok, parseJson, requireAgentPrincipal } from "@/lib/api";
+import { handleError, ok, parseJson, requireWorkspacePrincipal } from "@/lib/api";
 import { parseProjectKey, parseProjectName } from "@/lib/validate";
 import type { CreateProjectInput } from "@/lib/types";
 
@@ -13,7 +13,7 @@ import type { CreateProjectInput } from "@/lib/types";
 export async function GET(req: Request) {
   try {
     const db = getDb();
-    return ok(listProjects(db, requireAgentPrincipal(req, db).ownerId));
+    return ok(listProjects(db, (await requireWorkspacePrincipal(req, db)).ownerId));
   } catch (err) {
     return handleError(err);
   }
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const db = getDb();
-    const principal = requireAgentPrincipal(req, db);
+    const principal = await requireWorkspacePrincipal(req, db);
     const body = await parseJson<CreateProjectInput>(req);
     const key = parseProjectKey(body.key);
     const name = body.name === undefined ? key : parseProjectName(body.name);

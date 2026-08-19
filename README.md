@@ -94,7 +94,10 @@ Hosted OrbitTrack requires a configured administrator email, an agent bearer
 token, and a session secret. Browser users authenticate with Google OpenID
 Connect; the initial administrator signs in with the configured email and
 claims the migrated local workspace. Self-service registration is intentionally
-not enabled until ORBT-19.
+enabled for up to ten non-administrator accounts by default. The administrator
+can pause registration or change that cap at `/admin/registration`; each new
+account starts with an empty workspace. Workspace owners create and revoke
+their agent credentials at `/settings/agents`.
 
 Agents add `Authorization: Bearer <token>` to every API request. The token is
 bound to one workspace, and every project, label, issue, dependency, and Q&A

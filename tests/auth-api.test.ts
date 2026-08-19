@@ -7,7 +7,7 @@ const h = createHarness();
 
 describe("agent API authentication", () => {
   it("rejects missing and invalid bearer credentials without leaking workspace data", async () => {
-    const missing = await h.fetch("/api/projects", { headers: { authorization: "" } });
+    const missing = await h.fetch("/api/issues", { headers: { authorization: "" } });
     expect(missing.status).toBe(401);
     await expect(missing.json()).resolves.toEqual({ error: { message: "authentication required", code: "unauthorized" } });
 
@@ -52,5 +52,28 @@ describe("agent API authentication", () => {
     const crossWorkspace = await h.fetch("/api/issues?project=ADMIN", { headers: otherHeaders });
     expect(crossWorkspace.status).toBe(404);
     await expect(crossWorkspace.json()).resolves.toEqual({ error: { message: "not found", code: "not_found" } });
+  });
+
+  it("lets an authenticated browser create projects and manage its agent credentials", async () => {
+    const browserHeaders = { authorization: "" };
+    const project = await h.fetch("/api/projects", {
+      method: "POST",
+      headers: browserHeaders,
+      body: JSON.stringify({ key: "BROWSER", name: "Browser project" }),
+    });
+    expect(project.status).toBe(201);
+
+    const created = await h.fetch("/api/agent-tokens", {
+      method: "POST",
+      headers: browserHeaders,
+      body: JSON.stringify({ name: "browser agent" }),
+    });
+    expect(created.status).toBe(201);
+    const credential = await created.json();
+    expect(credential.token).toMatch(/^ot_/);
+
+    const listed = await h.fetch("/api/agent-tokens", { headers: browserHeaders });
+    expect(listed.status).toBe(200);
+    expect((await listed.json()).some((item: { id: number }) => item.id === credential.id)).toBe(true);
   });
 });
