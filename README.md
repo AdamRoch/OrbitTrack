@@ -139,6 +139,16 @@ not the PostgreSQL migration itself. See
 [the cutover runbook](docs/postgres-cutover-runbook.md) for the exact export,
 rehearsal, verification, and rollback commands.
 
+### Railway deployment
+
+The initial hosted runtime remains a **single-replica SQLite service** backed by
+a Railway volume mounted at `/data`. `railway.json` starts the production Next
+server and uses `/api/health` as its readiness check. The exact secret list,
+state-transfer procedure, custom-domain setup, acceptance checks, and rollback
+steps live in [the Railway deployment runbook](docs/railway-deployment-runbook.md).
+Do not scale this SQLite service horizontally; PostgreSQL is the later path for
+that capability.
+
 ---
 
 ## The frontier
