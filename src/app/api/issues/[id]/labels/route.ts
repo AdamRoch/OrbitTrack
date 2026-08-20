@@ -18,8 +18,8 @@ interface SetLabelsBody {
  * PUT /api/issues/:id/labels?project=KEY
  *   Full replacement: the issue's label set becomes exactly `labelNames`.
  *   Unknown label names return 400 (this endpoint does not create labels).
- *   Resolution is project-scoped. Labels themselves are global across projects
- *   in the lean view-only model.
+ *   Resolution is project-scoped. Labels are shared by projects in the same
+ *   authenticated workspace.
  */
 export async function PUT(req: Request, ctx: RouteContext) {
   try {

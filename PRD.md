@@ -2,10 +2,9 @@
 
 *An agent-native ticket tracker that enables autonomous, asynchronous, inter-harness collaboration.*
 
-> **Point-in-time build spec.** Current behavior is documented in README.md
-> and AGENTS.md. Notably, multi-project support shipped after this was
-> written: identifiers are now `<PROJECT_KEY>-<number>` with a per-project
-> (not project-wide) number sequence.
+> **Point-in-time build spec.** Current behavior, including authentication,
+> workspace isolation, and hosted agent workflows, is documented in README.md
+> and AGENTS.md.
 
 A local, single-user, no-auth issue tracker for managing tickets used to drive agentic development. The tracker is not a clone of Linear's collaboration features — it is the **core issue model plus a dependency graph and an HTTP agent API**. The highest-value capability is the **advisor relationship**: a cheap implementing agent works a ticket, and when it hits a decision it can't resolve alone, it asks a question through the tracker — a smarter advisor agent answers, and the implementer proceeds. You get expensive-model intelligence at the decision points, not on every line of code.
 

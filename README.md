@@ -2,10 +2,10 @@
 
 **An agent-native ticket tracker that enables autonomous, asynchronous, inter-harness collaboration.**
 
-A local, no-auth issue tracker for driving agentic development. Issues with
+An authenticated ticket tracker for driving agentic development. Issues have
 status, priority, and labels plus a **dependency graph** and an **HTTP agent
-API**. Multiple projects can be tracked side by side in one instance, each
-with its own identifier prefix and per-project number sequence (`LIN-42`,
+API**. Each account owns an isolated workspace containing one or more projects.
+Every project has its own identifier prefix and number sequence (`LIN-42`,
 `OEMR-7`).
 
 The highest-value capability is the **advisor relationship**: a cheap, fast
@@ -63,17 +63,20 @@ tracker API instead of through the human.
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000. The database is created at `data/tracker.db` on
-first run, seeded with four default labels (`ready-for-agent`, `bug`,
-`feature`, `chore`), and bootstrapped with a default project whose key comes
-from `TRACKER_PREFIX`. A pre-existing single-project database is migrated in
-place on next start: its issues are backfilled into a default project keyed
-off their existing identifier prefix (uppercased; `TRACKER_PREFIX` is only
-used when the legacy DB holds no issues), and if it holds data, a timestamped
-snapshot file is written next to the DB first.
+Replace the placeholder administrator email, agent token, session secret, and
+Google OAuth values in `.env.local`, then open http://localhost:3000. The
+database is created at `data/tracker.db` on first run, seeded with four default
+labels (`ready-for-agent`, `bug`, `feature`, `chore`), and bootstrapped with a
+default project whose key comes from `TRACKER_PREFIX`. A pre-existing
+single-project database is migrated in place on next start: its issues are
+backfilled into a default project keyed off their existing identifier prefix
+(uppercased; `TRACKER_PREFIX` is only used when the legacy DB holds no issues),
+and if it holds data, a timestamped snapshot file is written next to the DB
+first.
 
 ### One-time setup / reset
 
@@ -87,6 +90,10 @@ snapshot file is written next to the DB first.
 | `TRACKER_DB_PATH` | `data/tracker.db` | Location of the SQLite file. |
 | `TRACKER_PREFIX` | `LIN` | Key of the default project bootstrapped on first run (stored uppercased; a project's key is its identifier prefix). Ignored when migrating a legacy DB that already has issues — their prefix wins (see above). Further projects are created via the API with their own keys. |
 | `TRACKER_SEED` | `true` | Set to `false` to skip seeding default labels. |
+
+Use `.env.example` as the local setup template. Railway-specific values and
+secret handling rules live in
+[the deployment runbook](docs/railway-deployment-runbook.md).
 
 ### Authentication and workspace isolation
 
@@ -167,11 +174,16 @@ Agents fetch the frontier, pick one, then claim it:
 
 ```bash
 # What can I work on right now?
-curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/frontier
+curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
+  "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/frontier"
 
 # Grab one atomically (todo → in_progress).
-curl -X POST -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/LIN-42/claim
+curl -X POST -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
+  "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/LIN-42/claim"
 ```
+
+These agent examples use the hosted tracker by default. Set
+`ORBITTRACK_BASE_URL=http://localhost:3000` only for deliberate local testing.
 
 The frontier is ordered by priority desc, then created asc (a long-waiting
 ticket wins ties over a fresh one).
@@ -228,9 +240,8 @@ CRUD lives at `/api/labels` (see [AGENTS.md](AGENTS.md)).
 
 The only mutator that performs a conditional status transition. An agent calls
 `GET /api/issues/frontier`, picks one, then `POST /api/issues/:id/claim`. If two
-agents race, both get `200` (single-user local app), but `409` is reserved for
-the case where the issue is in a non-claimable state so the contract is
-well-defined.
+agents race, both get `200` because claiming an already `in_progress` issue is
+idempotent. `409` is reserved for an issue in a non-claimable state.
 
 ### Dependency direction (fixed)
 

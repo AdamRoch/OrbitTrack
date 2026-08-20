@@ -71,5 +71,11 @@ describe("SiteNav", () => {
     for (const link of agentLinks) {
       expect(link.getAttribute("aria-current")).toBe("page");
     }
+
+    const [desktopLink, mobileLink] = agentLinks;
+    expect(
+      desktopLink.querySelector('span[class*="bg-[var(--accent)]"]'),
+    ).not.toBeNull();
+    expect(mobileLink.className).toContain("text-[var(--accent)]");
   });
 });

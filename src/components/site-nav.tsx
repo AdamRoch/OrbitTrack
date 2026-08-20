@@ -86,7 +86,7 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
                 <Icon className="h-3.5 w-3.5 transition-colors duration-300 group-hover:text-[--accent]" />
                 {label}
                 {isActive(href) && (
-                  <span className="ml-0.5 h-1 w-1 rounded-full bg-[--accent] shadow-[0_0_8px_rgba(var(--glow),0.9)]" />
+                  <span className="ml-0.5 h-1 w-1 rounded-full bg-[var(--accent)] shadow-[0_0_8px_rgba(var(--glow),0.9)]" />
                 )}
               </Link>
             ))}
@@ -133,7 +133,9 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
               open
                 ? "translate-y-0 opacity-100"
                 : "translate-y-12 opacity-0",
-              isActive(href) ? "text-[--accent]" : "text-[--foreground]",
+              isActive(href)
+                ? "text-[var(--accent)]"
+                : "text-[--foreground]",
             )}
             style={{ transitionDelay: open ? `${100 + i * 70}ms` : "0ms" }}
           >

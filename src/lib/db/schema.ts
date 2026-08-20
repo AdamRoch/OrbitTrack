@@ -33,19 +33,18 @@ export const priorityLabels: Record<Priority, string> = {
 /**
  * Logical schema for the tracker.
  *
- *   projects        — the top-level scope; the identifier prefix IS the key
+ *   projects        — workspace-owned groups; the identifier prefix IS the key
  *   issues          — the core ticket entity, scoped to a project
- *   labels          — triage vocabulary (name + color); global across projects
+ *   labels          — workspace-scoped triage vocabulary shared by projects
  *   issue_labels    — many-to-many between issues and labels
  *   dependencies    — directed edge "blocker blocks blocked" (same-project only)
  *   issue_questions — per-issue Q&A channel
  *
- * Identifier scheme: `<PROJECT_KEY>-<number>` (e.g. LIN-42). The project key is
- * the identifier prefix; project keys are unique, so the identifier is globally
- * unique even though the *number* is per-project. `number` is a per-project
- * auto-increment assigned atomically from `projects.next_number` and never
- * reused; `identifier` is derived from `(key, number)` and stored for fast
- * lookups. Two projects may both have an issue #1 (`LIN-1`, `OEMR-1`).
+ * Identifier scheme: `<PROJECT_KEY>-<number>` (e.g. LIN-42). Project keys are
+ * unique within a workspace. `number` is a per-project auto-increment assigned
+ * atomically from `projects.next_number` and never reused; `identifier` is
+ * derived from `(key, number)` and stored for fast lookups. Two projects may
+ * both have an issue #1 (`LIN-1`, `OEMR-1`).
  *
  * Dependency direction is fixed: a row (blocker=A, blocked=B) reads
  * "A blocks B" / "B is blocked by A". The frontier query for B checks that
@@ -74,8 +73,8 @@ export const issues = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     // Per-project auto-increment; never reused, separate from the surrogate id.
     number: integer("number").notNull(),
-    // Globally unique because project keys are globally unique. Stored as
-    // `${projectKey}-${number}` so it round-trips through any external system.
+    // Stored as `${projectKey}-${number}` so it round-trips through any external
+    // system. The database currently enforces global identifier uniqueness.
     identifier: text("identifier").notNull().unique(),
     projectId: integer("project_id")
       .notNull()
@@ -89,7 +88,7 @@ export const issues = sqliteTable(
   },
   (t) => [
     // `number` is unique per project (two projects may both have a #1).
-    // `identifier` is globally unique because keys are globally unique.
+    // `identifier` also has a global UNIQUE constraint on the column.
     uniqueIndex("issues_project_number_unique").on(t.projectId, t.number),
     index("idx_issues_project").on(t.projectId),
   ],

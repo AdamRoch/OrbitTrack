@@ -33,9 +33,9 @@ function dbPath(): string {
 }
 
 /**
- * `true` once we've initialized the DB for the current process + path. The app
- * is single-user and local, so a module-level cache is fine; tests opt out by
- * calling `createDb` / `resetDbCache` directly.
+ * `true` once we've initialized the DB for the current process + path. The
+ * single-replica SQLite deployment uses one process-wide connection; tests opt
+ * out by calling `createDb` / `resetDbCache` directly.
  */
 let _db: DB | null = null;
 let _dbPath: string | null = null;

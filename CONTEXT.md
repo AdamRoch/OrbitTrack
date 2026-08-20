@@ -1,21 +1,27 @@
 # Tracker
 
-A local, no-auth issue tracker for driving agentic development. The core
-entity is the issue; around it sit labels, a dependency graph, and a
-question-and-answer channel that lets an implementing agent ask a human
-(via an orchestrating model) for clarification without leaving its loop.
+An authenticated ticket tracker for driving agentic development. Each account
+owns an isolated workspace. The core entity is the issue; around it sit labels,
+a dependency graph, and a question-and-answer channel that lets an implementing
+agent ask a human (via an orchestrating model) for clarification without
+leaving its loop.
 
 ## Language
 
 **Project**:
-The top-level partition of work — several can be tracked side by side in one
-instance. Each Project owns a unique alphabetic `key` that doubles as its
-identifier prefix, plus its own issue number sequence, so `LIN-1` and
-`OEMR-1` coexist. Every Issue belongs to exactly one Project, and resolution
-by identifier or id is project-scoped (no cross-project leakage). Labels are
-global, not per-project.
-_Avoid_: Workspace, team (those imply people/tenancy; a Project only scopes
-tickets)
+A partition of work inside one Workspace. Each Project owns a unique alphabetic
+`key` that doubles as its identifier prefix, plus its own issue number sequence,
+so `LIN-1` and `OEMR-1` coexist. Every Issue belongs to exactly one Project, and
+resolution by identifier or id is project-scoped. Labels belong to the
+Workspace and can be shared by its Projects.
+_Avoid_: Team (OrbitTrack models workspace ownership, not team membership)
+
+**Workspace**:
+The account-owned security boundary containing Projects, Labels, Issues,
+dependencies, Questions, and agent credentials. Browser sessions and agent
+credentials derive this scope from their authenticated identity. Requests
+cannot select another Workspace with a project query parameter.
+_Avoid_: Project (a Project organizes tickets inside the security boundary)
 
 **Issue**:
 The unit of work an agent picks up, works, and reports done. The code and

@@ -137,7 +137,7 @@ export function listIssues(
     );
   } else if (filters.label) {
     // Find issue ids that carry a label by this name, then intersect with
-    // status/priority conditions. Labels are global across projects.
+    // status/priority conditions. Labels are shared by the owner's projects.
     const matched = db
       .select({ issueId: s.issueLabels.issueId })
       .from(s.issueLabels)
@@ -648,7 +648,7 @@ export function claimIssue(
  * List all labels, sorted by name. A stored label sharing the derived system
  * label's name (a leftover from older seed data) is excluded: that label is
  * virtual and never managed here, so surfacing a stale stored row would be
- * misleading. Labels are global across projects in the lean view-only model.
+ * misleading. Labels are shared by projects in the same workspace.
  */
 export function listLabels(db: DB, ownerId = 1): LabelDTO[] {
   const rows = db.select().from(s.labels).where(eq(s.labels.ownerId, ownerId)).orderBy(asc(s.labels.name)).all();

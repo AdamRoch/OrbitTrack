@@ -93,7 +93,8 @@ A good answer confirms and adds the one piece of context that makes the decision
 stick:
 
 > "Yes, server action. It matches `src/app/actions.ts` and keeps the mutation
-> server-side, which is what the no-auth single-user model assumes."
+> server-side, where the existing browser mutation path checks the user's
+> authenticated workspace."
 
 A bad answer is vague or defers:
 
