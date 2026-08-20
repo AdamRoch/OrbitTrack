@@ -3,13 +3,16 @@ import { getRawDb } from "./db";
 
 type OutboxRow = { id: number; dedupe_key: string; owner_email: string; owner_name: string | null; created_at: number; attempts: number };
 
+const SENDING_LEASE_MS = 5 * 60 * 1000;
+
 export async function deliverPendingNotifications(fetcher: typeof fetch = fetch): Promise<void> {
   if (!RESEND_API_KEY || !ADMIN_EMAIL) return;
   const db = getRawDb();
   const now = Date.now();
-  const rows = db.prepare("SELECT id, dedupe_key, owner_email, owner_name, created_at, attempts FROM notification_outbox WHERE status IN ('pending','retry') AND next_attempt_at <= ? ORDER BY id LIMIT 10").all(now) as OutboxRow[];
+  const leaseExpiredAt = now - SENDING_LEASE_MS;
+  const rows = db.prepare("SELECT id, dedupe_key, owner_email, owner_name, created_at, attempts FROM notification_outbox WHERE (status IN ('pending','retry') AND next_attempt_at <= ?) OR (status = 'sending' AND updated_at <= ?) ORDER BY id LIMIT 10").all(now, leaseExpiredAt) as OutboxRow[];
   for (const row of rows) {
-    const claim = db.prepare("UPDATE notification_outbox SET status = 'sending', attempts = attempts + 1, updated_at = ? WHERE id = ? AND status IN ('pending','retry')").run(now, row.id);
+    const claim = db.prepare("UPDATE notification_outbox SET status = 'sending', attempts = attempts + 1, updated_at = ? WHERE id = ? AND ((status IN ('pending','retry') AND next_attempt_at <= ?) OR (status = 'sending' AND updated_at <= ?))").run(now, row.id, now, leaseExpiredAt);
     if (claim.changes !== 1) continue;
     try {
       const response = await fetcher("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": row.dedupe_key }, body: JSON.stringify({ from: RESEND_FROM, to: [ADMIN_EMAIL], subject: "New OrbitTrack workspace", html: `<p>A new workspace was created for <strong>${escapeHtml(row.owner_name || row.owner_email)}</strong> (${escapeHtml(row.owner_email)}).</p><p>Created: ${new Date(row.created_at).toISOString()}</p>` }) });

@@ -66,8 +66,11 @@ describe("portable workspace state", () => {
     expect(imported.prepare("SELECT status, attempts, last_error FROM notification_outbox WHERE id = 70").get())
       .toEqual({ status: "retry", attempts: 2, last_error: "temporary" });
     const knownBootstrapHash = createHash("sha256").update("orbittrack-test-token").digest("hex");
-    expect(imported.prepare("SELECT token_hash FROM agent_tokens WHERE id = 1").get())
-      .not.toEqual({ token_hash: knownBootstrapHash });
+    const importedToken = imported.prepare("SELECT token_hash FROM agent_tokens WHERE id = 1").get() as { token_hash: string };
+    expect(importedToken.token_hash).not.toBe(knownBootstrapHash);
+    expect(importedToken.token_hash).not.toBe(
+      createHash("sha256").update("orbittrack-imported-agent-token:1").digest("hex"),
+    );
     imported.close();
   });
 

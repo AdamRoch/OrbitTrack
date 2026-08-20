@@ -302,7 +302,7 @@ export function createIssue(
     // strict contract is PUT /issues/:id/labels. The derived "Ready for Agent"
     // label is never stored, so it's silently ignored here too.
     if (args.labelNames && args.labelNames.length > 0) {
-      const existing = tx.select().from(s.labels).all();
+      const existing = tx.select().from(s.labels).where(eq(s.labels.ownerId, project.ownerId)).all();
       const byName = new Map(existing.map((l) => [l.name.toLowerCase(), l]));
       for (const name of args.labelNames) {
         if (isSystemLabel(name)) continue;

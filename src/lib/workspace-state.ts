@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -193,8 +193,8 @@ function insertRows(raw: Database.Database, table: TableName | "sqlite_sequence"
   for (const row of records) statement.run(...columns.map((column) => row[column]));
 }
 
-function inactiveTokenHash(id: unknown): string {
-  return createHash("sha256").update(`orbittrack-imported-agent-token:${String(id)}`).digest("hex");
+function inactiveTokenHash(): string {
+  return randomBytes(32).toString("hex");
 }
 
 function assertEmptyDestination(path: string): void {
@@ -229,7 +229,7 @@ export function importWorkspaceState(destinationPath: string, value: unknown): W
       insertRows(raw, "labels", artifact.state.labels);
       const tokens = artifact.state.agentTokens.map((token) => ({
         ...token,
-        token_hash: inactiveTokenHash(token.id),
+        token_hash: inactiveTokenHash(),
       }));
       insertRows(raw, "agent_tokens", tokens);
       insertRows(raw, "notification_outbox", artifact.state.notificationOutbox);
