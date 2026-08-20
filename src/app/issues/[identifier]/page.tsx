@@ -14,6 +14,7 @@ import { AlienIcon, RadarIcon, SignalIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { QATranscript } from "@/components/qa-transcript";
 import { LiveRefresh } from "@/components/live-refresh";
+import { getBrowserSession } from "@/lib/auth";
 
 /**
  * Detail view (/issues/:identifier). Full title, rendered markdown, status &
@@ -33,6 +34,8 @@ export default async function IssueDetailPage({
 }) {
   const [{ identifier }, sp] = await Promise.all([params, searchParams]);
   const db = getServerDb();
+  const session = await getBrowserSession();
+  if (!session) notFound();
 
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
@@ -45,7 +48,7 @@ export default async function IssueDetailPage({
   const descriptionHtml = await renderMarkdown(issue.description);
   const blockers = getBlockers(db, project, identifier) ?? [];
   const blockedBy = getBlockedBy(db, project, identifier) ?? [];
-  const allLabels = listLabels(db);
+  const allLabels = listLabels(db, session.user.ownerId);
 
   // The back-link carries the project context.
   const backHref = `/?project=${project.key}`;

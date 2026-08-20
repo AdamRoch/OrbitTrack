@@ -6,7 +6,7 @@ import {
   notFound,
   ok,
   parseJson,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 import { requireQuestionText } from "@/lib/validate";
@@ -20,7 +20,7 @@ export async function GET(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const questions = getIssueQuestions(db, project, id);
     if (questions === null) return notFound("issue not found");
@@ -44,7 +44,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const body = await parseJson<CreateQuestionInput>(req);
     const question = requireQuestionText(body.question);

@@ -1,14 +1,25 @@
 import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import * as schema from "./schema";
-import { PROJECT_PREFIX } from "../config";
+import { PROJECT_PREFIX, ADMIN_EMAIL, BOOTSTRAP_AGENT_TOKEN } from "../config";
 const { labels, projects } = schema;
 
 export type DB = BetterSQLite3Database<typeof schema>;
+
+export type RegistrationSettings = {
+  registrationsOpen: boolean;
+  accountCap: number;
+  activeAccountCount: number;
+};
+
+export type RegistrationResult =
+  | { kind: "existing" | "created"; user: schema.UserRow }
+  | { kind: "closed" | "full" | "identity_conflict" };
 
 /**
  * Where the single SQLite file lives. Overridable via env so tests can point
@@ -22,9 +33,9 @@ function dbPath(): string {
 }
 
 /**
- * `true` once we've initialized the DB for the current process + path. The app
- * is single-user and local, so a module-level cache is fine; tests opt out by
- * calling `createDb` / `resetDbCache` directly.
+ * `true` once we've initialized the DB for the current process + path. The
+ * single-replica SQLite deployment uses one process-wide connection; tests opt
+ * out by calling `createDb` / `resetDbCache` directly.
  */
 let _db: DB | null = null;
 let _dbPath: string | null = null;
@@ -46,10 +57,17 @@ export function getDb(): DB {
   _raw.pragma("foreign_keys = ON");
   _db = drizzle(_raw, { schema });
   ensureSchema(_raw);
-  // Guarantee the default project exists so the app has a scope to operate in
-  // before any /api/projects call is made. Idempotent.
-  ensureDefaultProject(_raw);
+  const ownerId = ensureTenantSchema(_raw, _dbPath);
+  ensureDefaultProject(_raw, null, ownerId);
   return _db;
+}
+
+/** Internal raw connection for small transactional infrastructure such as the
+ * durable notification outbox. Application data access stays on Drizzle. */
+export function getRawDb(): Database.Database {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return _raw;
 }
 
 /**
@@ -61,7 +79,8 @@ export function createDb(path: string): { db: DB; raw: Database.Database } {
   raw.pragma("journal_mode = WAL");
   raw.pragma("foreign_keys = ON");
   ensureSchema(raw);
-  ensureDefaultProject(raw);
+  const ownerId = ensureTenantSchema(raw, path);
+  ensureDefaultProject(raw, null, ownerId);
   return { db: drizzle(raw, { schema }), raw };
 }
 
@@ -77,6 +96,23 @@ export function resetDbCache(): void {
   _db = null;
   _raw = null;
   _dbPath = null;
+}
+
+/**
+ * Readiness is deliberately narrower than a liveness check: the process is
+ * ready only after it can open the configured database, finish initialization,
+ * and execute a harmless query. Errors stay inside this boundary so callers
+ * never receive file paths, credentials, or SQLite details.
+ */
+export function isDatabaseReady(): boolean {
+  try {
+    const db = getDb();
+    db.run(sql`SELECT 1`);
+    return true;
+  } catch {
+    console.error("[health] database readiness check failed");
+    return false;
+  }
 }
 
 /**
@@ -304,7 +340,7 @@ function rebuildLegacyIssuesTable(raw: Database.Database): void {
   // legacy schema has one global prefix, so all issues share it. Only fall
   // back to PROJECT_PREFIX when there are no issues.
   const legacyKey = legacyIssuePrefix(raw);
-  const defaultProject = ensureDefaultProject(raw, legacyKey);
+  const defaultProject = ensureDefaultProject(raw, legacyKey, 1);
 
   // Seed from the legacy high-water counter if present (preferred — it is the
   // authoritative never-reuse sequence). Fall back to MAX(number) so we never
@@ -437,7 +473,8 @@ function columnExists(raw: Database.Database, table: string, col: string): boole
  */
 function ensureDefaultProject(
   raw: Database.Database,
-  keyOverride?: string | null,
+  keyOverride: string | null | undefined,
+  ownerId: number,
 ): {
   id: number;
   key: string;
@@ -451,15 +488,38 @@ function ensureDefaultProject(
   // project and wrongly create a second one. Only when no project exists at all
   // (fresh DB) do we create one keyed by PROJECT_PREFIX.
   const key = keyOverride ?? PROJECT_PREFIX;
+  // Legacy issue migration runs before the tenancy migration adds owner_id.
+  // Use the old project shape for that one narrow transition; the subsequent
+  // tenancy migration assigns the resulting project to the administrator.
+  if (!columnExists(raw, "projects", "owner_id")) {
+    const legacyLookup = keyOverride != null
+      ? raw.prepare("SELECT id, key, name, next_number FROM projects WHERE key = ?").get(key)
+      : raw.prepare("SELECT id, key, name, next_number FROM projects ORDER BY id LIMIT 1").get();
+    const existing = legacyLookup as
+      | { id: number; key: string; name: string; next_number: number }
+      | undefined;
+    if (existing) {
+      return {
+        id: existing.id,
+        key: existing.key,
+        name: existing.name,
+        nextNumber: existing.next_number,
+      };
+    }
+    const info = raw
+      .prepare("INSERT INTO projects (key, name, next_number, created_at) VALUES (?, ?, 0, ?)")
+      .run(key, key, Date.now());
+    return { id: Number(info.lastInsertRowid), key, name: key, nextNumber: 0 };
+  }
   const lookup = keyOverride != null
     ? raw
-        .prepare("SELECT id, key, name, next_number FROM projects WHERE key = ?")
-        .get(key)
+        .prepare("SELECT id, key, name, next_number FROM projects WHERE key = ? AND owner_id = ?")
+        .get(key, ownerId)
     : raw
         .prepare(
-          "SELECT id, key, name, next_number FROM projects ORDER BY id LIMIT 1",
+          "SELECT id, key, name, next_number FROM projects WHERE owner_id = ? ORDER BY id LIMIT 1",
         )
-        .get();
+        .get(ownerId);
   const existing = lookup as
     | { id: number; key: string; name: string; next_number: number }
     | undefined;
@@ -474,10 +534,252 @@ function ensureDefaultProject(
   const now = Date.now();
   const info = raw
     .prepare(
-      "INSERT INTO projects (key, name, next_number, created_at) VALUES (?, ?, 0, ?)",
+      "INSERT INTO projects (owner_id, key, name, next_number, created_at) VALUES (?, ?, ?, 0, ?)",
     )
-    .run(key, key, now);
+    .run(ownerId, key, key, now);
   return { id: Number(info.lastInsertRowid), key, name: key, nextNumber: 0 };
+}
+
+/**
+ * Forward-only tenancy migration. Existing local records become the configured
+ * administrator's workspace. Tables are rebuilt because SQLite cannot remove
+ * the old global UNIQUE constraints on project keys and label names.
+ */
+function ensureTenantSchema(raw: Database.Database, path: string): number {
+  if (!ADMIN_EMAIL || !BOOTSTRAP_AGENT_TOKEN) {
+    throw new Error("ORBITTRACK_ADMIN_EMAIL and ORBITTRACK_AGENT_TOKEN are required in production");
+  }
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      google_subject TEXT UNIQUE,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS agent_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      revoked_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS registration_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      registrations_open INTEGER NOT NULL DEFAULT 1 CHECK (registrations_open IN (0, 1)),
+      account_cap INTEGER NOT NULL DEFAULT 10 CHECK (account_cap >= 0),
+      active_account_count INTEGER NOT NULL DEFAULT 0 CHECK (active_account_count >= 0),
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS notification_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dedupe_key TEXT NOT NULL UNIQUE,
+      owner_email TEXT NOT NULL,
+      owner_name TEXT,
+      created_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL,
+      delivered_at INTEGER,
+      provider_id TEXT,
+      last_error TEXT,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notification_outbox_due ON notification_outbox(status, next_attempt_at);
+  `);
+  const now = Date.now();
+  let admin = raw.prepare("SELECT id FROM users WHERE email = ?").get(ADMIN_EMAIL) as { id: number } | undefined;
+  // Repair only the development placeholder created by pre-release builds;
+  // never reassign a real Google-bound account merely because configuration
+  // changed.
+  if (!admin) {
+    const placeholder = raw.prepare("SELECT id FROM users WHERE email = 'admin@orbittrack.local' AND is_admin = 1 AND google_subject IS NULL").get() as { id: number } | undefined;
+    if (placeholder) {
+      raw.prepare("UPDATE users SET email = ? WHERE id = ?").run(ADMIN_EMAIL, placeholder.id);
+      raw.prepare("DELETE FROM agent_tokens WHERE owner_id = ? AND token_hash = ?")
+        .run(placeholder.id, createHash("sha256").update("orbittrack-local-dev-token").digest("hex"));
+      admin = placeholder;
+    }
+  }
+  if (!admin) {
+    const result = raw.prepare("INSERT INTO users (email, is_admin, created_at) VALUES (?, 1, ?)").run(ADMIN_EMAIL, now);
+    admin = { id: Number(result.lastInsertRowid) };
+  }
+  const ownerId = admin.id;
+  raw.prepare(
+    "INSERT OR IGNORE INTO registration_settings (id, registrations_open, account_cap, active_account_count, updated_at) VALUES (1, 1, 10, (SELECT COUNT(*) FROM users WHERE is_admin = 0), ?)",
+  ).run(now);
+  const tokenHash = createHash("sha256").update(BOOTSTRAP_AGENT_TOKEN).digest("hex");
+  raw.prepare("INSERT OR IGNORE INTO agent_tokens (owner_id, token_hash, name, created_at) VALUES (?, ?, 'bootstrap-agent', ?)").run(ownerId, tokenHash, now);
+
+  if (!columnExists(raw, "projects", "owner_id") || !columnExists(raw, "labels", "owner_id")) {
+    backupBeforeTenantMigration(raw, path);
+  }
+  if (!columnExists(raw, "projects", "owner_id")) {
+    const fk = raw.pragma("foreign_keys", { simple: true });
+    raw.pragma("foreign_keys = OFF");
+    try {
+      raw.transaction(() => {
+        raw.exec(`CREATE TABLE projects_tenant_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          key TEXT NOT NULL,
+          name TEXT NOT NULL,
+          next_number INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          UNIQUE(owner_id, key)
+        );`);
+        raw.prepare("INSERT INTO projects_tenant_new (id, owner_id, key, name, next_number, created_at) SELECT id, ?, key, name, next_number, created_at FROM projects").run(ownerId);
+        raw.exec("DROP TABLE projects; ALTER TABLE projects_tenant_new RENAME TO projects;");
+      })();
+    } finally { raw.pragma(`foreign_keys = ${fk ? "ON" : "OFF"}`); }
+  }
+  if (!columnExists(raw, "labels", "owner_id")) {
+    const fk = raw.pragma("foreign_keys", { simple: true });
+    raw.pragma("foreign_keys = OFF");
+    try {
+      raw.transaction(() => {
+        raw.exec(`CREATE TABLE labels_tenant_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          color TEXT NOT NULL,
+          UNIQUE(owner_id, name)
+        );`);
+        raw.prepare("INSERT INTO labels_tenant_new (id, owner_id, name, color) SELECT id, ?, name, color FROM labels").run(ownerId);
+        raw.exec("DROP TABLE labels; ALTER TABLE labels_tenant_new RENAME TO labels;");
+      })();
+    } finally { raw.pragma(`foreign_keys = ${fk ? "ON" : "OFF"}`); }
+  }
+  raw.exec("CREATE INDEX IF NOT EXISTS idx_projects_owner ON projects(owner_id); CREATE INDEX IF NOT EXISTS idx_labels_owner ON labels(owner_id);");
+  return ownerId;
+}
+
+function registrationSettingsFromRaw(raw: Database.Database): RegistrationSettings {
+  const row = raw.prepare(
+    "SELECT registrations_open, account_cap, active_account_count FROM registration_settings WHERE id = 1",
+  ).get() as { registrations_open: number; account_cap: number; active_account_count: number };
+  return {
+    registrationsOpen: row.registrations_open === 1,
+    accountCap: row.account_cap,
+    activeAccountCount: row.active_account_count,
+  };
+}
+
+/** Read platform registration state. Only callers that already authenticated an
+ * administrator should expose this data to a browser. */
+export function getRegistrationSettings(): RegistrationSettings {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return registrationSettingsFromRaw(_raw);
+}
+
+/** Administrator-only mutation. The cap may be lowered below the current
+ * count: that closes capacity for new accounts without affecting members. */
+export function updateRegistrationSettings(input: {
+  registrationsOpen: boolean;
+  accountCap: number;
+}): RegistrationSettings {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  if (!Number.isInteger(input.accountCap) || input.accountCap < 0 || input.accountCap > 10_000) {
+    throw new Error("account cap must be an integer between 0 and 10000");
+  }
+  _raw.prepare(
+    "UPDATE registration_settings SET registrations_open = ?, account_cap = ?, updated_at = ? WHERE id = 1",
+  ).run(input.registrationsOpen ? 1 : 0, input.accountCap, Date.now());
+  return registrationSettingsFromRaw(_raw);
+}
+
+/**
+ * Find or atomically create the account behind a verified Google identity.
+ * The conditional counter update is the capacity decision: only one writer can
+ * consume a slot, so concurrent first sign-ins cannot exceed the cap.
+ */
+export function provisionGoogleUserOnDatabase(
+  raw: Database.Database,
+  email: string,
+  googleSubject: string,
+  name: string | null,
+): RegistrationResult {
+  const register = raw.transaction((): RegistrationResult => {
+    const bySubject = raw.prepare("SELECT * FROM users WHERE google_subject = ?").get(googleSubject) as schema.UserRow | undefined;
+    if (bySubject) return bySubject.email === email ? { kind: "existing", user: bySubject } : { kind: "identity_conflict" };
+
+    const byEmail = raw.prepare("SELECT * FROM users WHERE email = ?").get(email) as schema.UserRow | undefined;
+    if (byEmail) {
+      raw.prepare("UPDATE users SET google_subject = ?, name = COALESCE(?, name) WHERE id = ? AND google_subject IS NULL")
+        .run(googleSubject, name, byEmail.id);
+      const linked = raw.prepare("SELECT * FROM users WHERE id = ?").get(byEmail.id) as schema.UserRow;
+      return linked.googleSubject === googleSubject ? { kind: "existing", user: linked } : { kind: "identity_conflict" };
+    }
+
+    const settings = registrationSettingsFromRaw(raw);
+    if (!settings.registrationsOpen) return { kind: "closed" };
+    const claim = raw.prepare(
+      "UPDATE registration_settings SET active_account_count = active_account_count + 1, updated_at = ? WHERE id = 1 AND registrations_open = 1 AND active_account_count < account_cap",
+    ).run(Date.now());
+    if (claim.changes !== 1) return registrationSettingsFromRaw(raw).registrationsOpen ? { kind: "full" } : { kind: "closed" };
+
+    const createdAt = Date.now();
+    const inserted = raw.prepare("INSERT INTO users (google_subject, email, name, is_admin, created_at) VALUES (?, ?, ?, 0, ?)")
+      .run(googleSubject, email, name, createdAt);
+    const user = raw.prepare("SELECT * FROM users WHERE id = ?").get(inserted.lastInsertRowid) as schema.UserRow;
+    raw.prepare("INSERT INTO notification_outbox (dedupe_key, owner_email, owner_name, created_at, next_attempt_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(`workspace-created:${user.id}`, user.email, user.name, createdAt, createdAt, createdAt);
+    return { kind: "created", user };
+  });
+  return register();
+}
+
+export function provisionGoogleUser(email: string, googleSubject: string, name: string | null): RegistrationResult {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return provisionGoogleUserOnDatabase(_raw, email, googleSubject, name);
+}
+
+export function createAgentToken(ownerId: number, name: string): { id: number; token: string } {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  const token = `ot_${randomBytes(24).toString("base64url")}`;
+  const result = _raw.prepare(
+    "INSERT INTO agent_tokens (owner_id, token_hash, name, created_at) VALUES (?, ?, ?, ?)",
+  ).run(ownerId, createHash("sha256").update(token).digest("hex"), name, Date.now());
+  return { id: Number(result.lastInsertRowid), token };
+}
+
+export function listAgentTokens(ownerId: number): Omit<schema.AgentTokenRow, "tokenHash">[] {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return _raw.prepare(
+    "SELECT id, owner_id AS ownerId, name, created_at AS createdAt, revoked_at AS revokedAt FROM agent_tokens WHERE owner_id = ? ORDER BY id DESC",
+  ).all(ownerId) as Omit<schema.AgentTokenRow, "tokenHash">[];
+}
+
+export function revokeAgentToken(ownerId: number, tokenId: number): boolean {
+  getDb();
+  if (!_raw) throw new Error("database is not initialized");
+  return _raw.prepare("UPDATE agent_tokens SET revoked_at = ? WHERE id = ? AND owner_id = ? AND revoked_at IS NULL")
+    .run(Date.now(), tokenId, ownerId).changes === 1;
+}
+
+export function listNotificationOutbox(): { id: number; ownerEmail: string; ownerName: string | null; createdAt: number; status: string; attempts: number; deliveredAt: number | null; lastError: string | null }[] {
+  const raw = getRawDb();
+  return raw.prepare("SELECT id, owner_email AS ownerEmail, owner_name AS ownerName, created_at AS createdAt, status, attempts, delivered_at AS deliveredAt, last_error AS lastError FROM notification_outbox ORDER BY id DESC LIMIT 100").all() as { id: number; ownerEmail: string; ownerName: string | null; createdAt: number; status: string; attempts: number; deliveredAt: number | null; lastError: string | null }[];
+}
+
+/** SQLite VACUUM INTO includes committed WAL state, unlike copying the .db file. */
+function backupBeforeTenantMigration(raw: Database.Database, path: string): void {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${path}.pre-tenant-${stamp}.db`;
+  const quoted = backupPath.replace(/'/g, "''");
+  try {
+    raw.exec(`VACUUM INTO '${quoted}'`);
+  } catch (error) {
+    throw new Error(`refusing tenancy migration because SQLite backup failed: ${String(error)}`);
+  }
 }
 
 /**
@@ -487,12 +789,13 @@ function ensureDefaultProject(
  */
 export function seedDefaultsIfNeeded(
   db: DB,
+  ownerId: number,
   defaults: { name: string; color: string }[] = DEFAULT_LABELS,
 ): void {
-  const existing = db.select().from(labels).all();
+  const existing = db.select().from(labels).where(eq(labels.ownerId, ownerId)).all();
   if (existing.length > 0) return;
   for (const d of defaults) {
-    db.insert(labels).values({ name: d.name, color: d.color }).run();
+    db.insert(labels).values({ ownerId, name: d.name, color: d.color }).run();
   }
 }
 
@@ -533,6 +836,37 @@ export function getProjectByKey(db: DB, key: string): schema.ProjectRow | null {
   const upper = key.trim().toUpperCase();
   if (upper.length === 0) return null;
   return db.select().from(projects).where(eq(projects.key, upper)).get() ?? null;
+}
+
+export function getProjectByKeyForOwner(
+  db: DB,
+  ownerId: number,
+  key: string,
+): schema.ProjectRow | null {
+  const upper = key.trim().toUpperCase();
+  if (upper.length === 0) return null;
+  return db.select().from(projects).where(and(eq(projects.ownerId, ownerId), eq(projects.key, upper))).get() ?? null;
+}
+
+export function getDefaultProjectForOwner(db: DB, ownerId: number): schema.ProjectRow | null {
+  return db.select().from(projects).where(eq(projects.ownerId, ownerId)).orderBy(projects.id).limit(1).get() ?? null;
+}
+
+export function findUserByEmail(db: DB, email: string): schema.UserRow | null {
+  return db.select().from(schema.users).where(eq(schema.users.email, email.toLowerCase())).get() ?? null;
+}
+
+export function bindGoogleSubject(db: DB, email: string, subject: string, name?: string | null): schema.UserRow | null {
+  const user = findUserByEmail(db, email);
+  if (!user) return null;
+  if (user.googleSubject && user.googleSubject !== subject) return null;
+  db.update(schema.users).set({ googleSubject: subject, name: name ?? user.name }).where(eq(schema.users.id, user.id)).run();
+  return db.select().from(schema.users).where(eq(schema.users.id, user.id)).get() ?? null;
+}
+
+export function findActiveAgentByToken(db: DB, rawToken: string): schema.AgentTokenRow | null {
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  return db.select().from(schema.agentTokens).where(and(eq(schema.agentTokens.tokenHash, tokenHash), isNull(schema.agentTokens.revokedAt))).get() ?? null;
 }
 
 /**

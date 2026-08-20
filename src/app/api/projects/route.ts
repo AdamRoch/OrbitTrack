@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { createProject, listProjects } from "@/lib/domain";
-import { handleError, ok, parseJson } from "@/lib/api";
+import { handleError, ok, parseJson, requireWorkspacePrincipal } from "@/lib/api";
 import { parseProjectKey, parseProjectName } from "@/lib/validate";
 import type { CreateProjectInput } from "@/lib/types";
 
@@ -10,10 +10,10 @@ import type { CreateProjectInput } from "@/lib/types";
  *   — first). Use this to populate the project switcher in the UI or to
  *   discover the available identifier prefixes.
  */
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const db = getDb();
-    return ok(listProjects(db));
+    return ok(listProjects(db, (await requireWorkspacePrincipal(req, db)).ownerId));
   } catch (err) {
     return handleError(err);
   }
@@ -30,10 +30,11 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const db = getDb();
+    const principal = await requireWorkspacePrincipal(req, db);
     const body = await parseJson<CreateProjectInput>(req);
     const key = parseProjectKey(body.key);
     const name = body.name === undefined ? key : parseProjectName(body.name);
-    const project = createProject(db, { key, name });
+    const project = createProject(db, { ownerId: principal.ownerId, key, name });
     return ok(project, 201);
   } catch (err) {
     return handleError(err);

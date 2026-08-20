@@ -1,10 +1,12 @@
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { getDb, seedDefaultsIfNeeded, getDefaultProject } from "./db";
+import { getDb, seedDefaultsIfNeeded, getDefaultProjectForOwner, getProjectByKeyForOwner } from "./db";
+import { ADMIN_EMAIL } from "./config";
 import * as schema from "./db/schema";
 import type { DB } from "./db";
 import type { ProjectRow } from "./db/schema";
 import { ACTIVE_PROJECT_COOKIE, SEED_DEFAULT_LABELS } from "./config";
+import { getBrowserSession } from "./auth";
 
 /**
  * Get the app DB, running first-run seeding if enabled and needed. UI server
@@ -14,7 +16,9 @@ import { ACTIVE_PROJECT_COOKIE, SEED_DEFAULT_LABELS } from "./config";
 export function getServerDb(): DB {
   const db = getDb();
   if (SEED_DEFAULT_LABELS) {
-    seedDefaultsIfNeeded(db);
+    const admin = db.select().from(schema.users).where(eq(schema.users.email, ADMIN_EMAIL)).get();
+    if (!admin) throw new Error("OrbitTrack administrator is not initialized");
+    seedDefaultsIfNeeded(db, admin.id);
   }
   return db;
 }
@@ -28,18 +32,15 @@ export function getServerDb(): DB {
 export function getServerProject(
   db: DB,
   key: string | null | undefined,
+  ownerId = 1,
 ): ProjectRow | null {
   const trimmed = key?.trim();
   if (trimmed && trimmed.length > 0) {
     return (
-      db
-        .select()
-        .from(schema.projects)
-        .where(eq(schema.projects.key, trimmed.toUpperCase()))
-        .get() ?? null
+      getProjectByKeyForOwner(db, ownerId, trimmed)
     );
   }
-  return getDefaultProject(db);
+  return getDefaultProjectForOwner(db, ownerId);
 }
 
 /**
@@ -55,11 +56,14 @@ export async function getActiveProject(
   db: DB,
   explicitKey: string | null | undefined,
 ): Promise<ProjectRow | null> {
-  if (explicitKey?.trim()) return getServerProject(db, explicitKey);
+  const session = await getBrowserSession();
+  if (!session) return null;
+  const ownerId = session.user.ownerId;
+  if (explicitKey?.trim()) return getServerProject(db, explicitKey, ownerId);
   const sticky = (await cookies()).get(ACTIVE_PROJECT_COOKIE)?.value;
   if (sticky) {
-    const project = getServerProject(db, sticky);
+    const project = getServerProject(db, sticky, ownerId);
     if (project) return project;
   }
-  return getDefaultProject(db);
+  return getDefaultProjectForOwner(db, ownerId);
 }

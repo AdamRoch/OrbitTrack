@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/reveal";
 import { LiveRefresh } from "@/components/live-refresh";
+import { getBrowserSession } from "@/lib/auth";
 
 // The graph reflects live issue data, so render it on every request rather
 // than caching a build-time snapshot.
@@ -29,8 +30,10 @@ export default async function MapPage({
 }) {
   const sp = await searchParams;
   const db = getServerDb();
+  const session = await getBrowserSession();
+  if (!session) return null;
 
-  const projects = listProjects(db);
+  const projects = listProjects(db, session.user.ownerId);
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
   const project = await getActiveProject(db, projectKey);

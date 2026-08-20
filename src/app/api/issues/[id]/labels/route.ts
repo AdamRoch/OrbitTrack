@@ -5,7 +5,7 @@ import {
   notFound,
   ok,
   parseJson,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 import { parseLabelNames } from "@/lib/validate";
@@ -18,14 +18,14 @@ interface SetLabelsBody {
  * PUT /api/issues/:id/labels?project=KEY
  *   Full replacement: the issue's label set becomes exactly `labelNames`.
  *   Unknown label names return 400 (this endpoint does not create labels).
- *   Resolution is project-scoped. Labels themselves are global across projects
- *   in the lean view-only model.
+ *   Resolution is project-scoped. Labels are shared by projects in the same
+ *   authenticated workspace.
  */
 export async function PUT(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const body = await parseJson<SetLabelsBody>(req);
 

@@ -10,8 +10,8 @@ import { SYSTEM_LABEL_COLOR, SYSTEM_LABEL_NAME } from "./config";
  * driver, so these helpers are synchronous too — which also lets us call them
  * safely inside `db.transaction()`.
  *
- * We fetch labels and blocker ids per issue; the tracker is single-user with a
- * small dataset, so per-issue queries are fine and keep the code simple.
+ * We fetch labels and blocker ids per issue. The capped deployment keeps each
+ * workspace small enough for these per-issue queries and the simpler code.
  *
  * The "Ready for Agent" label is *derived*, not stored: when an issue is on the
  * frontier (status `todo`, every blocker `done`) it is injected here as a

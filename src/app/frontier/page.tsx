@@ -5,6 +5,7 @@ import { ProjectSwitcher } from "@/components/project-switcher";
 import { CometIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { LiveRefresh } from "@/components/live-refresh";
+import { getBrowserSession } from "@/lib/auth";
 
 /**
  * Frontier view (/frontier). The set of `todo` issues whose every blocker is
@@ -19,8 +20,10 @@ export default async function FrontierPage({
 }) {
   const sp = await searchParams;
   const db = getServerDb();
+  const session = await getBrowserSession();
+  if (!session) return null;
 
-  const projects = listProjects(db);
+  const projects = listProjects(db, session.user.ownerId);
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
   const project = await getActiveProject(db, projectKey);

@@ -6,7 +6,7 @@ import {
   notFound,
   ok,
   parseJson,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 import { requireAnswerText } from "@/lib/validate";
@@ -29,7 +29,7 @@ export async function POST(req: Request, ctx: Context) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id, number: numberParam } = await ctx.params;
     const number = Number(numberParam);
     if (!Number.isInteger(number) || number < 1) {

@@ -29,6 +29,8 @@ import {
 } from "@/lib/validate";
 import type { ProjectRow } from "@/lib/db/schema";
 import { ACTIVE_PROJECT_COOKIE } from "@/lib/config";
+import { getBrowserSession } from "@/lib/auth";
+import { updateRegistrationSettings } from "@/lib/db";
 
 /**
  * Server actions — the UI's mutation seam. They go through the same domain
@@ -55,6 +57,22 @@ function fail(message: string): ActionResult {
   return { ok: false, error: message };
 }
 
+/** Platform control-plane action. This is deliberately separate from normal
+ * workspace mutations: only the configured administrator may change signup. */
+export async function updateRegistrationSettingsAction(formData: FormData): Promise<void> {
+  const session = await getBrowserSession();
+  if (!session?.user.isAdmin) throw new Error("administrator access is required");
+  const cap = Number(formData.get("accountCap"));
+  if (!Number.isInteger(cap) || cap < 0 || cap > 10_000) {
+    throw new Error("account cap must be an integer between 0 and 10000");
+  }
+  updateRegistrationSettings({
+    registrationsOpen: formData.get("registrationsOpen") === "on",
+    accountCap: cap,
+  });
+  revalidatePath("/admin/registration");
+}
+
 function isRedirectError(e: unknown): boolean {
   return (
     typeof e === "object" &&
@@ -71,7 +89,9 @@ async function resolveProject(projectKey: string | undefined): Promise<{
   project: ProjectRow;
 }> {
   const db = getServerDb();
-  const project = getServerProject(db, projectKey);
+  const session = await getBrowserSession();
+  if (!session) throw new ValidationError("authentication required", "unauthorized");
+  const project = getServerProject(db, projectKey, session.user.ownerId);
   if (!project) {
     throw new ValidationError(
       projectKey
@@ -315,9 +335,11 @@ export async function createLabelAction(
 ): Promise<ActionResult> {
   const db = getServerDb();
   try {
+    const session = await getBrowserSession();
+    if (!session) return fail("authentication required");
     const name = parseLabelName(formData.get("name"));
     const color = parseColor(formData.get("color") || undefined);
-    createLabel(db, { name, color });
+    createLabel(db, { ownerId: session.user.ownerId, name, color });
     revalidatePath("/");
     revalidatePath("/labels");
     return { ok: true };
@@ -333,7 +355,9 @@ export async function deleteLabelAction(
   _formData?: FormData,
 ): Promise<ActionResult> {
   const db = getServerDb();
-  const ok = deleteLabel(db, id);
+  const session = await getBrowserSession();
+  if (!session) return fail("authentication required");
+  const ok = deleteLabel(db, session.user.ownerId, id);
   if (!ok) return fail("label not found");
   revalidatePath("/");
   revalidatePath("/labels");

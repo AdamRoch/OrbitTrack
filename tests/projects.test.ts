@@ -111,13 +111,13 @@ describe("multi-project", () => {
       expect(z.body.number).not.toBe(xNum);
     });
 
-    it("returns 400 when the project scope doesn't exist", async () => {
+    it("returns 404 when the project scope doesn't exist", async () => {
       const res = await api.createIssue(
         { title: "x" },
         { projectKey: "NOPE" },
       );
-      expect(res.status).toBe(400);
-      expect(res.body.error.code).toBe("project_not_found");
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
     });
   });
 

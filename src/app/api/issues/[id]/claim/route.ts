@@ -5,7 +5,7 @@ import {
   handleError,
   notFound,
   ok,
-  requireProject,
+  requireAuthorizedProject,
   RouteContext,
 } from "@/lib/api";
 
@@ -24,7 +24,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   try {
     const db = getDb();
     const url = new URL(req.url);
-    const project = requireProject(db, url);
+    const project = requireAuthorizedProject(req, db, url);
     const { id } = await ctx.params;
     const result = claimIssue(db, project, id);
     if (!result.ok) {

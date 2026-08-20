@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { CometIcon, StarIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { LiveRefresh } from "@/components/live-refresh";
+import { getBrowserSession } from "@/lib/auth";
 
 /**
  * List view (/). Tickets default to the To Do state; the filter bar has a
@@ -25,13 +26,15 @@ export default async function IssuesPage({
 }) {
   const sp = await searchParams;
   const db = getServerDb();
+  const session = await getBrowserSession();
+  if (!session) return null;
 
-  const projects = listProjects(db);
+  const projects = listProjects(db, session.user.ownerId);
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
   const project = await getActiveProject(db, projectKey);
 
-  const labels = listLabels(db);
+  const labels = listLabels(db, session.user.ownerId);
 
   // Default view is the To Do list; ?status= overrides with any status, and
   // ?status=all (the dropdown's "Any") means no status filter at all.

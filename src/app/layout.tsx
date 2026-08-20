@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SpaceBackground } from "@/components/space-background";
 import { SiteNav } from "@/components/site-nav";
+import { getBrowserSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,11 +21,13 @@ export const metadata: Metadata = {
     "An agent-native ticket tracker that enables autonomous, asynchronous, inter-harness collaboration.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getBrowserSession();
+  if (!session) redirect("/api/auth/signin");
   return (
     <html
       lang="en"

@@ -39,10 +39,10 @@ everything.
 1. **Poll for open questions.**
    ```bash
    # All open questions:
-   curl localhost:3000/api/questions?status=open
+   curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/questions?status=open"
 
    # Scoped to a track:
-   curl localhost:3000/api/questions?status=open&label=auth
+   curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/questions?status=open&label=auth"
    ```
    Each entry embeds the full issue — title, description, status, priority, labels,
    blockers, and the full question history. You get the complete context the
@@ -68,7 +68,8 @@ everything.
 
 4. **Answer.**
    ```bash
-   curl -X POST localhost:3000/api/issues/:id/questions/:number/respond \
+   curl -X POST "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/:id/questions/:number/respond" \
+     -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
      -H 'content-type: application/json' \
      -d '{"answer":"go with the server action — it matches the existing pattern in src/app/actions.ts and keeps the mutation server-side"}'
    ```
@@ -92,7 +93,8 @@ A good answer confirms and adds the one piece of context that makes the decision
 stick:
 
 > "Yes, server action. It matches `src/app/actions.ts` and keeps the mutation
-> server-side, which is what the no-auth single-user model assumes."
+> server-side, where the existing browser mutation path checks the user's
+> authenticated workspace."
 
 A bad answer is vague or defers:
 

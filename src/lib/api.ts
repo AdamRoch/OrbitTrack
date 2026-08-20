@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import type { DB } from "./db";
-import { getDefaultProject, getProjectByKey } from "./db";
+import { getDefaultProjectForOwner, getProjectByKeyForOwner, findActiveAgentByToken } from "./db";
 import type { ProjectRow } from "./db/schema";
 import type { ApiErrorBody } from "./types";
 import { ValidationError } from "./validate";
+import { getBrowserSession } from "./auth";
 
 /**
  * Shared HTTP helpers for the REST API. Every response goes through these so
@@ -41,12 +42,21 @@ export function conflict(message: string, code: string | null = null): NextRespo
   return NextResponse.json(errorBody(message, code), { status: 409 });
 }
 
+export function unauthorized(): NextResponse {
+  return NextResponse.json(errorBody("authentication required", "unauthorized"), { status: 401 });
+}
+
+class AuthenticationError extends Error {}
+class ProjectNotFoundError extends Error {}
+
 /**
  * Map a thrown domain/validation error to an HTTP response. Unknown errors
  * become a generic 500 with a stable envelope (the message is logged server-
  * side but not leaked verbatim in production).
  */
 export function handleError(err: unknown): NextResponse {
+  if (err instanceof AuthenticationError) return unauthorized();
+  if (err instanceof ProjectNotFoundError) return notFound();
   if (err instanceof ValidationError) {
     return badRequest(err.message, err.code);
   }
@@ -84,27 +94,55 @@ export interface RouteContext<
  * Resolve the active project for a request. Reads `?project=KEY` from the URL:
  *   - absent or empty → the default project (first by id) — backward-compatible
  *     with the single-project API every existing agent uses.
- *   - present but doesn't match a project → throws ValidationError → 400.
+ *   - present but doesn't match a project → 404, including when it belongs to
+ *     another workspace.
  *
  * Every `/api/issues/*` route passes its Request through this so the scope is
  * applied uniformly. The resolver then gates identifier-form lookups against
  * `project.key` to prevent cross-project leakage.
  */
 export function requireProject(db: DB, url: URL): ProjectRow {
+  return requireProjectForOwner(db, url, 1);
+}
+
+export interface AgentPrincipal { ownerId: number; tokenId: number; }
+
+/** Authenticate a non-interactive agent with its account-scoped bearer token. */
+export function requireAgentPrincipal(req: Request, db: DB): AgentPrincipal {
+  const match = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i);
+  if (!match) throw new AuthenticationError("authentication required");
+  const token = findActiveAgentByToken(db, match[1]);
+  if (!token) throw new AuthenticationError("authentication required");
+  return { ownerId: token.ownerId, tokenId: token.id };
+}
+
+/** A browser user may use the same project creation endpoint as the UI; agents
+ * remain bearer-token-only. The workspace always comes from the credential. */
+export async function requireWorkspacePrincipal(req: Request, db: DB): Promise<AgentPrincipal> {
+  const authorization = req.headers.get("authorization");
+  if (authorization?.trim()) return requireAgentPrincipal(req, db);
+  const session = await getBrowserSession();
+  if (!session) throw new AuthenticationError("authentication required");
+  return { ownerId: session.user.ownerId, tokenId: 0 };
+}
+
+/** Resolve an API project only within the authenticated agent's workspace. */
+export function requireAuthorizedProject(req: Request, db: DB, url: URL): ProjectRow {
+  return requireProjectForOwner(db, url, requireAgentPrincipal(req, db).ownerId);
+}
+
+export function requireProjectForOwner(db: DB, url: URL, ownerId: number): ProjectRow {
   const key = url.searchParams.get("project");
   if (key === null || key.trim().length === 0) {
-    const def = getDefaultProject(db);
+    const def = getDefaultProjectForOwner(db, ownerId);
     if (!def) {
       throw new ValidationError("no projects exist", "no_projects");
     }
     return def;
   }
-  const found = getProjectByKey(db, key);
+  const found = getProjectByKeyForOwner(db, ownerId, key);
   if (!found) {
-    throw new ValidationError(
-      `project "${key}" not found`,
-      "project_not_found",
-    );
+    throw new ProjectNotFoundError();
   }
   return found;
 }

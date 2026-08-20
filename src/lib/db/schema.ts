@@ -33,19 +33,18 @@ export const priorityLabels: Record<Priority, string> = {
 /**
  * Logical schema for the tracker.
  *
- *   projects        — the top-level scope; the identifier prefix IS the key
+ *   projects        — workspace-owned groups; the identifier prefix IS the key
  *   issues          — the core ticket entity, scoped to a project
- *   labels          — triage vocabulary (name + color); global across projects
+ *   labels          — workspace-scoped triage vocabulary shared by projects
  *   issue_labels    — many-to-many between issues and labels
  *   dependencies    — directed edge "blocker blocks blocked" (same-project only)
  *   issue_questions — per-issue Q&A channel
  *
- * Identifier scheme: `<PROJECT_KEY>-<number>` (e.g. LIN-42). The project key is
- * the identifier prefix; project keys are unique, so the identifier is globally
- * unique even though the *number* is per-project. `number` is a per-project
- * auto-increment assigned atomically from `projects.next_number` and never
- * reused; `identifier` is derived from `(key, number)` and stored for fast
- * lookups. Two projects may both have an issue #1 (`LIN-1`, `OEMR-1`).
+ * Identifier scheme: `<PROJECT_KEY>-<number>` (e.g. LIN-42). Project keys are
+ * unique within a workspace. `number` is a per-project auto-increment assigned
+ * atomically from `projects.next_number` and never reused; `identifier` is
+ * derived from `(key, number)` and stored for fast lookups. Two projects may
+ * both have an issue #1 (`LIN-1`, `OEMR-1`).
  *
  * Dependency direction is fixed: a row (blocker=A, blocked=B) reads
  * "A blocks B" / "B is blocked by A". The frontier query for B checks that
@@ -54,18 +53,19 @@ export const priorityLabels: Record<Priority, string> = {
  */
 export const projects = sqliteTable("projects", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerId: integer("owner_id").notNull().default(1).references(() => users.id, { onDelete: "cascade" }),
   // The identifier prefix, e.g. "LIN" or "OEMR". Stored uppercased; alphabetic
   // only (no digits) so it can't collide with the numeric part of an identifier.
   // Unique case-insensitively (enforced on create; stored uppercase so the
   // UNIQUE constraint is sufficient).
-  key: text("key").notNull().unique(),
+  key: text("key").notNull(),
   name: text("name").notNull(),
   // Per-project high-water counter for issue numbers. Using a stored counter
   // (instead of MAX(number)+1) guarantees numbers are never reused, even after
   // the highest-numbered issue is deleted. Atomically incremented at create.
   nextNumber: integer("next_number").notNull().default(0),
   createdAt: integer("created_at").notNull(),
-});
+}, (t) => [uniqueIndex("projects_owner_key_unique").on(t.ownerId, t.key)]);
 
 export const issues = sqliteTable(
   "issues",
@@ -73,8 +73,8 @@ export const issues = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     // Per-project auto-increment; never reused, separate from the surrogate id.
     number: integer("number").notNull(),
-    // Globally unique because project keys are globally unique. Stored as
-    // `${projectKey}-${number}` so it round-trips through any external system.
+    // Stored as `${projectKey}-${number}` so it round-trips through any external
+    // system. The database currently enforces global identifier uniqueness.
     identifier: text("identifier").notNull().unique(),
     projectId: integer("project_id")
       .notNull()
@@ -88,7 +88,7 @@ export const issues = sqliteTable(
   },
   (t) => [
     // `number` is unique per project (two projects may both have a #1).
-    // `identifier` is globally unique because keys are globally unique.
+    // `identifier` also has a global UNIQUE constraint on the column.
     uniqueIndex("issues_project_number_unique").on(t.projectId, t.number),
     index("idx_issues_project").on(t.projectId),
   ],
@@ -96,8 +96,36 @@ export const issues = sqliteTable(
 
 export const labels = sqliteTable("labels", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull().unique(),
+  ownerId: integer("owner_id").notNull().default(1).references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
   color: text("color").notNull(),
+}, (t) => [uniqueIndex("labels_owner_name_unique").on(t.ownerId, t.name)]);
+
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  googleSubject: text("google_subject").unique(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const agentTokens = sqliteTable("agent_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerId: integer("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  name: text("name").notNull(),
+  createdAt: integer("created_at").notNull(),
+  revokedAt: integer("revoked_at"),
+});
+
+/** Singleton platform control plane for self-service account registration. */
+export const registrationSettings = sqliteTable("registration_settings", {
+  id: integer("id").primaryKey(),
+  registrationsOpen: integer("registrations_open", { mode: "boolean" }).notNull().default(true),
+  accountCap: integer("account_cap").notNull().default(10),
+  activeAccountCount: integer("active_account_count").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
 });
 
 export const issueLabels = sqliteTable(
@@ -162,6 +190,9 @@ export type LabelRow = typeof labels.$inferSelect;
 export type DependencyRow = typeof dependencies.$inferSelect;
 export type QuestionRow = typeof issueQuestions.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
+export type UserRow = typeof users.$inferSelect;
+export type AgentTokenRow = typeof agentTokens.$inferSelect;
+export type RegistrationSettingsRow = typeof registrationSettings.$inferSelect;
 
 /**
  * A question's derived state. `open` = asked, awaiting an answer;

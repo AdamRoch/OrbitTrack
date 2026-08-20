@@ -11,7 +11,6 @@ import {
 import type { DB } from "./db";
 import {
   nextIssueNumber,
-  getProjectByKey,
 } from "./db";
 import * as s from "./db/schema";
 import type { IssueStatus, Priority, LabelRow, ProjectRow } from "./db/schema";
@@ -46,6 +45,7 @@ function isSystemLabel(name: string): boolean {
 // ----------------------------------------------------------------------------
 
 export interface CreateProjectArgs {
+  ownerId?: number;
   key: string; // already validated + uppercased by the caller
   name: string;
 }
@@ -57,7 +57,8 @@ export interface CreateProjectArgs {
  * `parseProjectKey` before calling.
  */
 export function createProject(db: DB, args: CreateProjectArgs): ProjectDTO {
-  const existing = getProjectByKey(db, args.key);
+  const ownerId = args.ownerId ?? 1;
+  const existing = db.select().from(s.projects).where(and(eq(s.projects.ownerId, ownerId), eq(s.projects.key, args.key))).get();
   if (existing) {
     throw new ValidationError(
       `project key "${args.key}" already exists`,
@@ -68,6 +69,7 @@ export function createProject(db: DB, args: CreateProjectArgs): ProjectDTO {
   const row = db
     .insert(s.projects)
     .values({
+      ownerId,
       key: args.key,
       name: args.name,
       nextNumber: 0,
@@ -79,8 +81,8 @@ export function createProject(db: DB, args: CreateProjectArgs): ProjectDTO {
 }
 
 /** List all projects, ordered by id (default project first). */
-export function listProjects(db: DB): ProjectDTO[] {
-  const rows = db.select().from(s.projects).orderBy(asc(s.projects.id)).all();
+export function listProjects(db: DB, ownerId = 1): ProjectDTO[] {
+  const rows = db.select().from(s.projects).where(eq(s.projects.ownerId, ownerId)).orderBy(asc(s.projects.id)).all();
   return rows.map(toProjectDTO);
 }
 
@@ -135,7 +137,7 @@ export function listIssues(
     );
   } else if (filters.label) {
     // Find issue ids that carry a label by this name, then intersect with
-    // status/priority conditions. Labels are global across projects.
+    // status/priority conditions. Labels are shared by the owner's projects.
     const matched = db
       .select({ issueId: s.issueLabels.issueId })
       .from(s.issueLabels)
@@ -300,7 +302,7 @@ export function createIssue(
     // strict contract is PUT /issues/:id/labels. The derived "Ready for Agent"
     // label is never stored, so it's silently ignored here too.
     if (args.labelNames && args.labelNames.length > 0) {
-      const existing = tx.select().from(s.labels).all();
+      const existing = tx.select().from(s.labels).where(eq(s.labels.ownerId, project.ownerId)).all();
       const byName = new Map(existing.map((l) => [l.name.toLowerCase(), l]));
       for (const name of args.labelNames) {
         if (isSystemLabel(name)) continue;
@@ -578,6 +580,12 @@ export function listOpenQuestions(
     .filter((e): e is OpenQuestionEntry => e !== null);
 }
 
+/** Account-scoped orchestrator view; no agent may read another workspace's Q&A. */
+export function listOpenQuestionsForOwner(db: DB, ownerId: number, label?: string): OpenQuestionEntry[] {
+  const projects = db.select().from(s.projects).where(eq(s.projects.ownerId, ownerId)).all();
+  return projects.flatMap((project) => listOpenQuestions(db, label, project));
+}
+
 // ----------------------------------------------------------------------------
 // Claiming
 // ----------------------------------------------------------------------------
@@ -640,22 +648,24 @@ export function claimIssue(
  * List all labels, sorted by name. A stored label sharing the derived system
  * label's name (a leftover from older seed data) is excluded: that label is
  * virtual and never managed here, so surfacing a stale stored row would be
- * misleading. Labels are global across projects in the lean view-only model.
+ * misleading. Labels are shared by projects in the same workspace.
  */
-export function listLabels(db: DB): LabelDTO[] {
-  const rows = db.select().from(s.labels).orderBy(asc(s.labels.name)).all();
+export function listLabels(db: DB, ownerId = 1): LabelDTO[] {
+  const rows = db.select().from(s.labels).where(eq(s.labels.ownerId, ownerId)).orderBy(asc(s.labels.name)).all();
   return (rows as LabelDTO[]).filter(
     (l) => l.name.toLowerCase() !== SYSTEM_LABEL_NAME,
   );
 }
 
 export interface CreateLabelArgs {
+  ownerId?: number;
   name: string;
   color: string;
 }
 
 /** Create a label. Throws ValidationError on duplicate or reserved name. */
 export function createLabel(db: DB, args: CreateLabelArgs): LabelDTO {
+  const ownerId = args.ownerId ?? 1;
   // The derived "Ready for Agent" label is reserved: it's injected virtually
   // at read time, so a persisted label of the same name would be shadowed and
   // confuse readers.
@@ -668,24 +678,26 @@ export function createLabel(db: DB, args: CreateLabelArgs): LabelDTO {
   const existing = db
     .select()
     .from(s.labels)
-    .where(eq(s.labels.name, args.name))
+    .where(and(eq(s.labels.ownerId, ownerId), eq(s.labels.name, args.name)))
     .all();
   if (existing.length > 0) {
     throw new ValidationError(`label "${args.name}" already exists`, "duplicate");
   }
   const row = db
     .insert(s.labels)
-    .values({ name: args.name, color: args.color })
+    .values({ ownerId, name: args.name, color: args.color })
     .returning()
     .get();
   return row as LabelDTO;
 }
 
 /** Delete a label; cascade removes it from all issues (issues are kept). */
-export function deleteLabel(db: DB, id: number): boolean {
-  const existing = db.select().from(s.labels).where(eq(s.labels.id, id)).get();
+export function deleteLabel(db: DB, ownerId: number, id?: number): boolean {
+  const labelId = id ?? ownerId;
+  const scopedOwnerId = id === undefined ? 1 : ownerId;
+  const existing = db.select().from(s.labels).where(and(eq(s.labels.id, labelId), eq(s.labels.ownerId, scopedOwnerId))).get();
   if (!existing) return false;
-  db.delete(s.labels).where(eq(s.labels.id, id)).run();
+  db.delete(s.labels).where(eq(s.labels.id, labelId)).run();
   return true;
 }
 
@@ -706,7 +718,7 @@ export function setIssueLabels(
   const issue = resolveIssue(db, project, idOrIdentifier);
   if (!issue) return null;
 
-  const all = db.select().from(s.labels).all();
+  const all = db.select().from(s.labels).where(eq(s.labels.ownerId, project.ownerId)).all();
   const byName = new Map(all.map((l) => [l.name.toLowerCase(), l]));
 
   const resolved: LabelRow[] = [];

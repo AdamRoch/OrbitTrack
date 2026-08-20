@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
-import { listOpenQuestions } from "@/lib/domain";
-import { badRequest, handleError, ok, requireProject } from "@/lib/api";
+import { listOpenQuestions, listOpenQuestionsForOwner } from "@/lib/domain";
+import { badRequest, handleError, ok, requireAgentPrincipal, requireProjectForOwner } from "@/lib/api";
 import { questionStatuses } from "@/lib/db/schema";
 
 const STATUS_SET = new Set<string>(questionStatuses);
@@ -25,6 +25,7 @@ const STATUS_SET = new Set<string>(questionStatuses);
 export async function GET(req: Request) {
   try {
     const db = getDb();
+    const principal = requireAgentPrincipal(req, db);
     const url = new URL(req.url);
     const status = url.searchParams.get("status") ?? "open";
     const label = url.searchParams.get("label") ?? undefined;
@@ -39,10 +40,10 @@ export async function GET(req: Request) {
 
     // `project` is optional here (unlike /api/issues where it has a default).
     // An empty/unknown value is a 400 via requireProject's validation path.
-    const project = projectKey ? requireProject(db, url) : undefined;
+    const project = projectKey ? requireProjectForOwner(db, url, principal.ownerId) : undefined;
 
     // Only `open` is materialized today; the query returns open questions.
-    const entries = listOpenQuestions(db, label, project);
+    const entries = project ? listOpenQuestions(db, label, project) : listOpenQuestionsForOwner(db, principal.ownerId, label);
     return ok(entries);
   } catch (err) {
     return handleError(err);

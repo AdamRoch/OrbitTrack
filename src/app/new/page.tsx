@@ -4,6 +4,7 @@ import { getServerDb, getActiveProject } from "@/lib/server-data";
 import { NewIssueForm } from "./new-issue-form";
 import { AlienIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
+import { getBrowserSession } from "@/lib/auth";
 
 /**
  * New ticket view (/new). Renders a form posting to the createIssueAction
@@ -21,8 +22,10 @@ export default async function NewIssuePage({
 }) {
   const sp = await searchParams;
   const db = getServerDb();
-  const labels = listLabels(db);
-  const projects = listProjects(db);
+  const session = await getBrowserSession();
+  if (!session) return null;
+  const labels = listLabels(db, session.user.ownerId);
+  const projects = listProjects(db, session.user.ownerId);
 
   const projectKey =
     typeof sp.project === "string" ? sp.project : undefined;
