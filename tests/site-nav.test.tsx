@@ -47,4 +47,29 @@ describe("SiteNav", () => {
     expect(menuButton().getAttribute("aria-expanded")).toBe("false");
     expect(document.body.style.overflow).toBe("");
   });
+
+  it("links to agent credentials from desktop and mobile navigation", () => {
+    const desktopLink = container.querySelector(
+      'nav[aria-label="Primary navigation"] a[href="/settings/agents"]',
+    );
+    const mobileLink = container.querySelector(
+      'nav[aria-label="Mobile navigation"] a[href="/settings/agents"]',
+    );
+
+    expect(desktopLink?.textContent).toContain("Agents");
+    expect(mobileLink?.textContent).toContain("Agents");
+  });
+
+  it("marks agent credentials as the current page", async () => {
+    route.pathname = "/settings/agents";
+    await act(async () => root.render(<SiteNav />));
+
+    const agentLinks = container.querySelectorAll(
+      'a[href="/settings/agents"]',
+    );
+    expect(agentLinks).toHaveLength(2);
+    for (const link of agentLinks) {
+      expect(link.getAttribute("aria-current")).toBe("page");
+    }
+  });
 });

@@ -4,13 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
-import { UfoIcon, AlienIcon, RadarIcon, StarIcon, CometIcon } from "@/components/icons";
+import {
+  UfoIcon,
+  AlienIcon,
+  RadarIcon,
+  StarIcon,
+  CometIcon,
+  SignalIcon,
+} from "@/components/icons";
 
 const LINKS = [
   { href: "/", label: "Tickets", Icon: StarIcon },
   { href: "/map", label: "Map", Icon: RadarIcon },
   { href: "/frontier", label: "Frontier", Icon: CometIcon },
   { href: "/labels", label: "Labels", Icon: AlienIcon },
+  { href: "/settings/agents", label: "Agents", Icon: SignalIcon },
 ];
 
 /**
@@ -45,7 +53,10 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-4">
-        <nav className="glass glow-edge-pulse flex items-center gap-1 rounded-full px-2 py-1.5 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95)]">
+        <nav
+          aria-label="Primary navigation"
+          className="glass glow-edge-pulse flex items-center gap-1 rounded-full px-2 py-1.5 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.95)]"
+        >
           <Link
             href="/"
             className="group mr-1 flex items-center gap-2 rounded-full px-3 py-1.5"
@@ -64,6 +75,7 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
               <Link
                 key={href}
                 href={href}
+                aria-current={isActive(href) ? "page" : undefined}
                 className={cn(
                   "group flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors duration-300",
                   isActive(href)
@@ -104,7 +116,8 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
       </header>
 
       {/* Mobile overlay */}
-      <div
+      <nav
+        aria-label="Mobile navigation"
         className={cn(
           "fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-[--background]/80 backdrop-blur-3xl transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] md:hidden",
           open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
@@ -114,6 +127,7 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
           <Link
             key={href}
             href={href}
+            aria-current={isActive(href) ? "page" : undefined}
             className={cn(
               "flex items-center gap-3 rounded-2xl px-6 py-3 text-2xl font-medium transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
               open
@@ -138,7 +152,7 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
           New ticket
           <CometIcon className="h-4 w-4" />
         </Link>
-      </div>
+      </nav>
     </>
   );
 }
