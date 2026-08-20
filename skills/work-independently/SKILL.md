@@ -12,8 +12,10 @@ disable-model-invocation: true
 
 # Work independently
 
-You are implementing tickets from the OrbitTrack tracker at `http://localhost:3000`.
-No advisor is listening. Do not post questions to the Q&A API — they will never
+You are implementing tickets from the authoritative OrbitTrack tracker at
+`https://orbittrack.adamroch.com`. Set `ORBITTRACK_BASE_URL=http://localhost:3000`
+only for deliberate local testing. No advisor is listening. Do not post questions
+to the Q&A API — they will never
 be answered and your session will hang. If you genuinely cannot proceed, stop and
 surface the problem to the human in your harness. Do not route it through the tracker.
 
@@ -55,7 +57,7 @@ For each ticket in your queue, repeat:
 
 6. **Mark done.**
    ```bash
-   curl -X PATCH localhost:3000/api/issues/:id \
+   curl -X PATCH "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/:id" \
      -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
      -H 'content-type: application/json' \
      -d '{"status":"done"}'

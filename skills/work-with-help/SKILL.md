@@ -13,8 +13,9 @@ disable-model-invocation: true
 
 # Work with help
 
-You are implementing tickets from the OrbitTrack tracker at `http://localhost:3000`.
-An advisor is listening — you can and should ask questions through the Q&A channel
+You are implementing tickets from the authoritative OrbitTrack tracker at
+`https://orbittrack.adamroch.com`. Set `ORBITTRACK_BASE_URL=http://localhost:3000`
+only for deliberate local testing. An advisor is listening — you can and should ask questions through the Q&A channel
 when you need a decision you can't resolve alone. The advisor reads your question
 with full issue context embedded and responds asynchronously.
 
@@ -53,7 +54,7 @@ questions like they cost money, because the expensive model answering them does.
 ## How to ask
 
 ```bash
-curl -X POST localhost:3000/api/issues/:id/questions \
+curl -X POST "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/:id/questions" \
   -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"question":"should the cache be per-request or global?"}'
@@ -93,7 +94,7 @@ push through.
 After posting, poll the issue until your question's status flips to `answered`:
 
 ```bash
-curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/:id
+curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/:id"
 ```
 
 The response includes a `questions[]` array. Each question has a `status` of

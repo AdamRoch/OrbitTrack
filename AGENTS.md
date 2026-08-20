@@ -7,12 +7,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 <!-- BEGIN:tracker-integration -->
 # Tracker — your work queue
 
-This repo has a local issue tracker running at **http://localhost:3000**. It is
-your source of truth for what to work on. Interact with it through the REST API
-(`curl` or `fetch`). All routes are JSON in, JSON out.
-
-The server must be running (`npm run dev`) before you can call it. If a request
-fails with a connection error, start the server first.
+The deployed tracker at **https://orbittrack.adamroch.com** is the source of
+truth for agent work. Interact with it through the REST API (`curl` or `fetch`).
+All routes are JSON in, JSON out. The examples default to the deployed service.
+Set `ORBITTRACK_BASE_URL=http://localhost:3000` only when deliberately testing a
+local OrbitTrack instance.
 
 Every REST request now requires an account-scoped agent bearer token:
 `Authorization: Bearer $ORBITTRACK_AGENT_TOKEN`. The server derives workspace
@@ -23,16 +22,16 @@ access to another user's project.
 
 1. **Check the frontier** — what's grabbable right now (todo + unblocked):
    ```bash
-   curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/frontier
+   curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/frontier"
    ```
 2. **Claim one** — atomically transitions `todo` → `in_progress`:
    ```bash
-   curl -X POST -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/issues/LIN-42/claim
+   curl -X POST -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/LIN-42/claim"
    ```
 3. **Do the work** — implement, test, verify.
 4. **Mark it done** when finished:
    ```bash
-   curl -X PATCH localhost:3000/api/issues/LIN-42 \
+   curl -X PATCH "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/LIN-42" \
      -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
      -H 'content-type: application/json' \
      -d '{"status":"done"}'
@@ -41,7 +40,7 @@ access to another user's project.
 If you discover a bug or a new task while working, **create a ticket** for it
 rather than fixing it inline:
 ```bash
-curl -X POST localhost:3000/api/issues \
+curl -X POST "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues" \
   -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"title":"...","description":"...","priority":2}'
@@ -64,8 +63,8 @@ identifier. Numeric `id` lookups are scoped the same way.
 To discover or create projects:
 
 ```bash
-curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" localhost:3000/api/projects
-curl -X POST localhost:3000/api/projects \
+curl -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/projects"
+curl -X POST "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/projects" \
   -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"key":"OEMR","name":"OpenEMR"}'
@@ -75,7 +74,7 @@ Then create the first issue under the new project (note the prefix on the
 returned identifier):
 
 ```bash
-curl -X POST 'localhost:3000/api/issues?project=OEMR' \
+curl -X POST "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues?project=OEMR" \
   -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"title":"first OpenEMR ticket"}'
@@ -135,7 +134,7 @@ project's key is `404` (no cross-project leakage).
 **Asking a question when blocked:** if you're working a ticket (`in_progress`)
 and need a human decision, post a question instead of stalling:
 ```bash
-curl -X POST localhost:3000/api/issues/LIN-42/questions \
+curl -X POST "${ORBITTRACK_BASE_URL:-https://orbittrack.adamroch.com}/api/issues/LIN-42/questions" \
   -H "Authorization: Bearer $ORBITTRACK_AGENT_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"question":"should the cache be per-request or global?"}'
