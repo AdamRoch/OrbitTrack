@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "state:export": "tsx scripts/workspace-state.ts export",
+    "state:import": "tsx scripts/workspace-state.ts import",
+    "state:verify": "tsx scripts/workspace-state.ts verify"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

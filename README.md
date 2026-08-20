@@ -131,6 +131,14 @@ workspace stores one durable outbox record; provider failures are retried with
 the same Resend idempotency key. Administrators can inspect delivery state at
 `/admin/notifications`; a message that exhausts retries is marked `failed`.
 
+### Portable state export
+
+Before the later PostgreSQL migration, OrbitTrack can export a versioned,
+checksummed state artifact and prove a clean SQLite import matches it. This is
+not the PostgreSQL migration itself. See
+[the cutover runbook](docs/postgres-cutover-runbook.md) for the exact export,
+rehearsal, verification, and rollback commands.
+
 ---
 
 ## The frontier
