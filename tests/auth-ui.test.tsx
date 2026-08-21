@@ -5,9 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SignInWithGoogleButton } from "@/components/auth-buttons";
 import { authOptions } from "@/lib/auth";
 
-const { signIn } = vi.hoisted(() => ({ signIn: vi.fn() }));
+const { provisionGoogleUser, signIn } = vi.hoisted(() => ({
+  provisionGoogleUser: vi.fn(),
+  signIn: vi.fn(),
+}));
 
 vi.mock("next-auth/react", () => ({ signIn, signOut: vi.fn() }));
+vi.mock("@/lib/db", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/db")>("@/lib/db");
+  return { ...actual, provisionGoogleUser };
+});
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -17,6 +24,7 @@ describe("browser authentication UI", () => {
   let root: Root;
 
   beforeEach(async () => {
+    provisionGoogleUser.mockReset();
     signIn.mockReset();
     signIn.mockResolvedValue(undefined);
     container = document.createElement("div");
@@ -41,5 +49,24 @@ describe("browser authentication UI", () => {
 
     await act(async () => button.click());
     expect(signIn).toHaveBeenCalledWith("google", { callbackUrl: "/" });
+  });
+
+  it.each([
+    ["full", "/signin?error=RegistrationFull"],
+    ["closed", "/signin?error=RegistrationClosed"],
+  ] as const)("routes a %s registration denial through the branded page", async (kind, destination) => {
+    provisionGoogleUser.mockReturnValue({ kind });
+    const callback = authOptions.callbacks?.signIn;
+    expect(callback).toBeDefined();
+
+    const result = await callback!({
+      user: { id: "pending-user" },
+      account: { provider: "google", providerAccountId: "google-subject", type: "oauth" },
+      profile: { email: "new@example.test", email_verified: true },
+      email: { verificationRequest: false },
+      credentials: undefined,
+    });
+
+    expect(result).toBe(destination);
   });
 });

@@ -25,6 +25,18 @@ describe("UI smoke", () => {
     expect(html).not.toMatch(/authjs\.dev/);
   });
 
+  it.each([
+    ["RegistrationFull", /current account limit/],
+    ["RegistrationClosed", /registrations are currently closed/],
+  ])("renders the %s denial on the branded sign-in page", async (error, message) => {
+    const response = await api.fetch(`/signin?error=${error}`, { headers: { cookie: "" } });
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toMatch(/Welcome to OrbitTrack/);
+    expect(html).toMatch(/Sign in with Google/);
+    expect(html).toMatch(message);
+  });
+
   it("list page renders with nav, filter bar, and empty state", async () => {
     // Seed a label so the filter options aren't empty.
     await api.createLabel({ name: "smoke-label", color: "#22c55e" });

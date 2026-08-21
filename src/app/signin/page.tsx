@@ -7,6 +7,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   AccessDenied: "This Google account does not have access to an OrbitTrack workspace.",
   OAuthCallback: "Google sign-in could not be completed. Please try again.",
   OAuthSignin: "Google sign-in could not be started. Please try again.",
+  RegistrationClosed: "New OrbitTrack registrations are currently closed. Existing users can still sign in.",
+  RegistrationFull: "OrbitTrack has reached its current account limit. Existing users can still sign in.",
 };
 
 export default async function SignInPage({

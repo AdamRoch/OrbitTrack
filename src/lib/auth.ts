@@ -25,9 +25,8 @@ export const authOptions: NextAuthOptions = {
       const verified = (profile as { email_verified?: unknown } | undefined)?.email_verified === true;
       if (!email || !verified || !account?.providerAccountId) return false;
       const result = provisionGoogleUser(email, account.providerAccountId, typeof profile?.name === "string" ? profile.name : null);
-      if (result.kind === "full" || result.kind === "closed") {
-        return `/api/auth/denied?reason=${result.kind}`;
-      }
+      if (result.kind === "full") return "/signin?error=RegistrationFull";
+      if (result.kind === "closed") return "/signin?error=RegistrationClosed";
       if (result.kind === "created") void deliverPendingNotifications();
       return result.kind !== "identity_conflict";
     },
