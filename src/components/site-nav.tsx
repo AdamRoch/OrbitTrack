@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
+import { SignOutButton } from "@/components/auth-buttons";
 import {
   UfoIcon,
   AlienIcon,
@@ -102,6 +103,8 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
             </span>
           </Link>
 
+          <SignOutButton />
+
           {/* Mobile hamburger */}
           <button
             type="button"
@@ -154,6 +157,7 @@ function RouteSiteNav({ pathname }: { pathname: string }) {
           New ticket
           <CometIcon className="h-4 w-4" />
         </Link>
+        <SignOutButton mobile />
       </nav>
     </>
   );

@@ -4,11 +4,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SiteNav } from "@/components/site-nav";
 
-const { route } = vi.hoisted(() => ({ route: { pathname: "/" } }));
+const { route, signOut } = vi.hoisted(() => ({
+  route: { pathname: "/" },
+  signOut: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => route.pathname,
 }));
+
+vi.mock("next-auth/react", () => ({ signOut }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -19,6 +24,8 @@ describe("SiteNav", () => {
 
   beforeEach(async () => {
     route.pathname = "/";
+    signOut.mockReset();
+    signOut.mockResolvedValue(undefined);
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -77,5 +84,14 @@ describe("SiteNav", () => {
       desktopLink.querySelector('span[class*="bg-[var(--accent)]"]'),
     ).not.toBeNull();
     expect(mobileLink.className).toContain("text-[var(--accent)]");
+  });
+
+  it("offers sign out in desktop and mobile navigation", async () => {
+    const signOutButtons = Array.from(container.querySelectorAll("button"))
+      .filter((button) => button.textContent === "Sign out");
+
+    expect(signOutButtons).toHaveLength(2);
+    await act(async () => signOutButtons[0].click());
+    expect(signOut).toHaveBeenCalledWith({ callbackUrl: "/signin" });
   });
 });

@@ -4,6 +4,10 @@ import { findUserByEmail, getDb, provisionGoogleUser } from "./db";
 import { deliverPendingNotifications } from "./notifications";
 
 declare module "next-auth" {
+  interface Profile {
+    email_verified?: boolean;
+  }
+
   interface Session {
     user: { id: string; ownerId: number; isAdmin: boolean; email?: string | null; name?: string | null };
   }
@@ -16,6 +20,7 @@ declare module "next-auth/jwt" {
 /** Browser identity only. Agents use account-scoped bearer credentials instead. */
 export const authOptions: NextAuthOptions = {
   providers: [GoogleProvider({ clientId: process.env.GOOGLE_CLIENT_ID ?? "", clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "" })],
+  pages: { signIn: "/signin", error: "/signin" },
   session: { strategy: "jwt" },
   secret: process.env.NEXTAUTH_SECRET ?? (process.env.NODE_ENV === "production" ? undefined : "orbittrack-local-dev-session-secret"),
   callbacks: {
@@ -24,9 +29,8 @@ export const authOptions: NextAuthOptions = {
       const verified = (profile as { email_verified?: unknown } | undefined)?.email_verified === true;
       if (!email || !verified || !account?.providerAccountId) return false;
       const result = provisionGoogleUser(email, account.providerAccountId, typeof profile?.name === "string" ? profile.name : null);
-      if (result.kind === "full" || result.kind === "closed") {
-        return `/api/auth/denied?reason=${result.kind}`;
-      }
+      if (result.kind === "full") return "/signin?error=RegistrationFull";
+      if (result.kind === "closed") return "/signin?error=RegistrationClosed";
       if (result.kind === "created") void deliverPendingNotifications();
       return result.kind !== "identity_conflict";
     },

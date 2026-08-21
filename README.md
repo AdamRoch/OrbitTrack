@@ -106,6 +106,11 @@ can pause registration or change that cap at `/admin/registration`; each new
 account starts with an empty workspace. Workspace owners create and revoke
 their agent credentials at `/settings/agents`.
 
+When a signed-out browser user opens a protected page, OrbitTrack redirects to
+its `/signin` page. The page offers one Google sign-in action and reports
+authentication or registration errors. The desktop and mobile navigation both
+include a sign-out control that returns to `/signin`.
+
 Agents add `Authorization: Bearer <token>` to every API request. The token is
 bound to one workspace, and every project, label, issue, dependency, and Q&A
 lookup is scoped to that workspace. Never put any of these secrets in a skill,
