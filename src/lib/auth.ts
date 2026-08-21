@@ -4,6 +4,10 @@ import { findUserByEmail, getDb, provisionGoogleUser } from "./db";
 import { deliverPendingNotifications } from "./notifications";
 
 declare module "next-auth" {
+  interface Profile {
+    email_verified?: boolean;
+  }
+
   interface Session {
     user: { id: string; ownerId: number; isAdmin: boolean; email?: string | null; name?: string | null };
   }
