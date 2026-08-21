@@ -2,7 +2,7 @@ import Link from "next/link";
 import { listLabels } from "@/lib/domain";
 import { getServerDb } from "@/lib/server-data";
 import { LabelChip } from "@/components/issue-display";
-import { CreateLabelForm, DeleteLabelButton } from "./label-forms";
+import { CreateLabelForm, DeleteLabelButton } from "@/app/labels/label-forms";
 import { AlienIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { SYSTEM_LABEL_COLOR, SYSTEM_LABEL_NAME } from "@/lib/config";

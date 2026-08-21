@@ -9,7 +9,7 @@ import {
   PriorityBadge,
   StatusBadge,
 } from "@/components/issue-display";
-import { IssueDetailForms } from "./issue-detail-forms";
+import { IssueDetailForms } from "@/app/issues/[identifier]/issue-detail-forms";
 import { AlienIcon, RadarIcon, SignalIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { QATranscript } from "@/components/qa-transcript";

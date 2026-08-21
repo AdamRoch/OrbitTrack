@@ -9,6 +9,22 @@ const api = createHarness();
  * These fetch the HTML and assert key elements are present.
  */
 describe("UI smoke", () => {
+  it("uses a branded local page for signed-out browser sessions", async () => {
+    const redirect = await api.fetch("/", {
+      headers: { cookie: "" },
+      redirect: "manual",
+    });
+    expect(redirect.status).toBe(307);
+    expect(redirect.headers.get("location")).toBe("/signin");
+
+    const signIn = await api.fetch("/signin", { headers: { cookie: "" } });
+    expect(signIn.status).toBe(200);
+    const html = await signIn.text();
+    expect(html).toMatch(/Welcome to OrbitTrack/);
+    expect(html).toMatch(/Sign in with Google/);
+    expect(html).not.toMatch(/authjs\.dev/);
+  });
+
   it("list page renders with nav, filter bar, and empty state", async () => {
     // Seed a label so the filter options aren't empty.
     await api.createLabel({ name: "smoke-label", color: "#22c55e" });

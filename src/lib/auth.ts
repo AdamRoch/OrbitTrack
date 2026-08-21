@@ -16,6 +16,7 @@ declare module "next-auth/jwt" {
 /** Browser identity only. Agents use account-scoped bearer credentials instead. */
 export const authOptions: NextAuthOptions = {
   providers: [GoogleProvider({ clientId: process.env.GOOGLE_CLIENT_ID ?? "", clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "" })],
+  pages: { signIn: "/signin", error: "/signin" },
   session: { strategy: "jwt" },
   secret: process.env.NEXTAUTH_SECRET ?? (process.env.NODE_ENV === "production" ? undefined : "orbittrack-local-dev-session-secret"),
   callbacks: {

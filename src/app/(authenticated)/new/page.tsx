@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listLabels, listProjects } from "@/lib/domain";
 import { getServerDb, getActiveProject } from "@/lib/server-data";
-import { NewIssueForm } from "./new-issue-form";
+import { NewIssueForm } from "@/app/new/new-issue-form";
 import { AlienIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { getBrowserSession } from "@/lib/auth";

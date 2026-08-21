@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SpaceBackground } from "@/components/space-background";
-import { SiteNav } from "@/components/site-nav";
-import { getBrowserSession } from "@/lib/auth";
-import { redirect } from "next/navigation";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,13 +18,11 @@ export const metadata: Metadata = {
     "An agent-native ticket tracker that enables autonomous, asynchronous, inter-harness collaboration.",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getBrowserSession();
-  if (!session) redirect("/api/auth/signin");
   return (
     <html
       lang="en"
@@ -35,10 +30,7 @@ export default async function RootLayout({
     >
       <body className="relative min-h-full">
         <SpaceBackground />
-        <SiteNav />
-        <main className="relative z-10 mx-auto w-full max-w-5xl px-4 pt-24 pb-16">
-          {children}
-        </main>
+        {children}
       </body>
     </html>
   );
